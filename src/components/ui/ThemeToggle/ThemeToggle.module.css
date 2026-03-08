@@ -1,0 +1,13 @@
+.themeToggle {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.themeToggle:hover {
+  border-color: var(--line-strong);
+}

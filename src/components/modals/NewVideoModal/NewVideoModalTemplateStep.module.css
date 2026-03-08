@@ -1,0 +1,138 @@
+.createVideoBackTop {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: var(--font-weight-500);
+  line-height: 1;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.createVideoHeading {
+  font-size: 22px;
+  font-weight: var(--font-weight-500);
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.createVideoTemplateToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.createVideoTemplateSearch {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: #1f2b3f;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+.createVideoTemplateFilterWrap {
+  position: relative;
+}
+
+.createVideoTemplateFilterButton {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: #5f6d83;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.createVideoTemplateFilterButton svg {
+  width: 20px;
+  height: 20px;
+}
+
+.createVideoTemplateFilterMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 130px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgb(17 26 42 / 14%);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  z-index: 3;
+}
+
+.createVideoTemplateFilterItem {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #48556d;
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.createVideoTemplateFilterItemActive {
+  background: #edf2ff;
+  color: #365bcf;
+  font-weight: var(--font-weight-600);
+}
+
+.createVideoTemplateGridViewport {
+  overflow-y: auto;
+  max-height: 340px;
+  padding-right: 6px;
+}
+
+.createVideoTemplateGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.createVideoTemplateEmpty {
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: #fff;
+  color: #5d6c84;
+  font-size: 13px;
+  padding: 14px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.createVideoFooter {
+  border-top: 1px solid var(--line);
+  margin-top: 0;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8a95a8;
+  font-size: 14px;
+  font-weight: var(--font-weight-600);
+  grid-row: 6;
+}
+
+.createVideoCancel {
+  border: none;
+  background: transparent;
+  color: #6f7b8f;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .createVideoTemplateGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

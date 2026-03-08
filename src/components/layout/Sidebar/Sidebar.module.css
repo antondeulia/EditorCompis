@@ -1,0 +1,189 @@
+.sidebar {
+  width: 72px;
+  background: #1e6fff;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: stretch;
+  justify-items: stretch;
+  padding: var(--space-4) 0;
+  transition: width 180ms ease;
+  position: relative;
+  z-index: 15;
+}
+
+.sidebarExpanded {
+  width: 220px;
+  align-items: stretch;
+  justify-items: stretch;
+  padding: var(--space-4) var(--space-2);
+}
+
+.sidebarBrandRow {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebarExpanded .sidebarBrandRow {
+  justify-content: flex-start;
+}
+
+.sidebarBrand {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1e6fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sidebarNav {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.sidebarExpanded .sidebarNav {
+  place-items: center start;
+  padding-left: 8px;
+}
+
+.sidebarList {
+  list-style: none;
+  display: grid;
+  gap: var(--space-4);
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebarLink {
+  color: #cde0ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  text-decoration: none;
+}
+
+.sidebarIcon {
+  color: currentColor;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.sidebarText {
+  display: none;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sidebarLinkActive {
+  background: transparent;
+  color: #ffffff;
+}
+
+.sidebarExpanded .sidebarLink {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 0 0 6px;
+}
+
+.sidebarExpanded .sidebarList {
+  width: calc(100% - 8px);
+}
+
+.sidebarExpanded .sidebarText {
+  display: inline;
+}
+
+.sidebarEmail {
+  display: none;
+  color: #d8e6ff;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.sidebarExpanded .sidebarEmail {
+  display: inline;
+}
+
+.sidebarMore {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  margin-left: 0;
+}
+
+.sidebarToggleIcon {
+  width: 18px;
+  height: 18px;
+  transition: transform 140ms ease;
+}
+
+.sidebarToggleIconExpanded {
+  transform: rotate(180deg);
+}
+
+.sidebarExpanded .sidebarMore {
+  justify-self: start;
+  margin-left: 18px;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 100%;
+    height: 64px;
+    grid-template-rows: 1fr;
+    grid-template-columns: auto 1fr auto;
+    padding: 0 var(--space-3);
+  }
+
+  .sidebarNav {
+    height: auto;
+  }
+
+  .sidebarExpanded {
+    width: 100%;
+    align-items: center;
+    justify-items: center;
+    padding: 0 var(--space-3);
+  }
+
+  .sidebarList {
+    display: flex;
+    gap: var(--space-2);
+    width: auto;
+  }
+
+  .sidebarText {
+    display: none !important;
+  }
+
+  .sidebarEmail {
+    display: none !important;
+  }
+
+  .sidebarExpanded .sidebarLink {
+    width: 44px;
+    justify-content: center;
+    padding: 0;
+  }
+}

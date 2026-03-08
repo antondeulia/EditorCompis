@@ -1,0 +1,71 @@
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 45%);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  z-index: 30;
+}
+
+.modal {
+  width: min(480px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.modalTitle {
+  font-size: var(--font-size-2);
+  margin-bottom: var(--space-3);
+}
+
+.modalForm {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.modalLabel {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-1);
+  color: var(--text-secondary);
+}
+
+.modalLabel input,
+.modalLabel textarea {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text-primary);
+  font-size: var(--font-size-1);
+  padding: var(--space-2) var(--space-3);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.secondaryButton {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
+  color: var(--text-secondary);
+  font-size: var(--font-size-1);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid #03ef62;
+  border-radius: var(--radius-sm);
+  background: #03ef62;
+  color: #000820;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-600);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}

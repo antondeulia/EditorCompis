@@ -1,0 +1,24 @@
+.loadingShell {
+  --color-accent: #7933ff;
+  min-height: 100vh;
+  background: #f3f6fb;
+  color: #2b3a52;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #d4ddeb;
+  border-top-color: var(--color-accent);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

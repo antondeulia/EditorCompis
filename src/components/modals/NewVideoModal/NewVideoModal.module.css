@@ -1,0 +1,146 @@
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 45%);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  z-index: 30;
+}
+
+.createVideoModal {
+  width: min(920px, 100%);
+  height: 520px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: grid;
+  grid-template-columns: 30% 1fr;
+  overflow: hidden;
+}
+
+.createVideoIntro {
+  border-right: 1px solid var(--line);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: #fbfcff;
+}
+
+.createVideoIntroIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #ebe4ff;
+  color: #7d54f8;
+  display: grid;
+  place-items: center;
+}
+
+.createVideoIntroIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.createVideoIntroTitle {
+  font-size: 26px;
+  font-weight: var(--font-weight-500);
+  line-height: 1.12;
+}
+
+.createVideoIntroText {
+  color: #6e7b90;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.createVideoTip {
+  border: none;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: #fff;
+  color: #5e6b81;
+  font-size: 13px;
+  line-height: 1.35;
+  margin-top: 22px;
+}
+
+.createVideoTipLabel {
+  font-size: 12px;
+  color: #77839b;
+  font-weight: var(--font-weight-600);
+}
+
+.createVideoTipLabel::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1fbe76;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.createVideoDocLink {
+  border: none;
+  background: transparent;
+  color: #7d54f8;
+  font-size: 13px;
+  font-weight: var(--font-weight-600);
+  justify-self: end;
+  align-self: flex-end;
+  margin-top: 8px;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.createVideoMain {
+  padding: 24px 36px 14px;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto 1fr auto;
+  align-content: start;
+  gap: 18px;
+}
+
+.createVideoMainStepTwo {
+  grid-template-rows: auto 1fr;
+}
+
+.createVideoClose {
+  border: none;
+  background: transparent;
+  color: #9ba6b8;
+  width: 24px;
+  height: 24px;
+  justify-self: end;
+  cursor: pointer;
+}
+
+.createVideoClose svg {
+  width: 20px;
+  height: 20px;
+}
+
+.createVideoUploadPicker {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .createVideoModal {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .createVideoIntro {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    gap: 12px;
+  }
+
+  .createVideoTip {
+    margin-top: 12px;
+  }
+}

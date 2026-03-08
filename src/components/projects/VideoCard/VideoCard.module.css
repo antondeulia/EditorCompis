@@ -1,0 +1,111 @@
+.videoCard {
+  display: grid;
+  color: inherit;
+  text-decoration: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+
+.videoCard:hover {
+  border-color: var(--line-strong);
+}
+
+.videoPreview {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-bottom: 1px solid var(--line);
+  background: #edf2f8;
+  display: grid;
+  place-items: center;
+}
+
+.videoPreviewMedia {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.videoStatusBadge {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-2);
+  left: var(--space-2);
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: var(--font-weight-600);
+  line-height: 1;
+}
+
+.videoPlayIcon {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  border: 1px solid #d0d8e6;
+  background: #ffffff;
+  color: #7f8ca4;
+  display: grid;
+  place-items: center;
+}
+
+.videoPlayIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.videoCardBody {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.videoCardTitle {
+  font-size: 20px;
+  font-weight: var(--font-weight-600);
+  line-height: 1.15;
+}
+
+.videoCardDescription {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  min-height: 32px;
+}
+
+.videoCardMeta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.videoCardFooter {
+  margin-top: var(--space-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.videoEditButton {
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: #03ef62;
+  color: #000820;
+  font-size: 12px;
+  font-weight: var(--font-weight-600);
+  line-height: 1.1;
+  cursor: pointer;
+}

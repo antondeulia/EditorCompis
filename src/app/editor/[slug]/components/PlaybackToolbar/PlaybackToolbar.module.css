@@ -1,0 +1,209 @@
+.toolbar {
+  --color-accent: #7933ff;
+  border-top: 1px solid #dbe3ef;
+  background: #ffffff;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 12px;
+}
+
+.leftGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.zoomSlider {
+  width: 120px;
+  accent-color: var(--color-accent);
+  margin: 0 2px;
+}
+
+.centerGroup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  justify-self: center;
+}
+
+.iconGroups {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.selectWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.selectWrap select {
+  appearance: none;
+  border: 0;
+  background: #eef1f5;
+  color: #223146;
+  border-radius: 4px;
+  height: 34px;
+  padding: 0 28px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.selectWrap svg {
+  position: absolute;
+  right: 9px;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+.iconButton,
+.iconButtonPrimary,
+.iconButtonBlue {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #243143;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.iconButton svg,
+.iconButtonPrimary svg,
+.iconButtonBlue svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.iconButton span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.zoomStepButton {
+  border: 0;
+  background: transparent;
+  width: 24px;
+  height: 24px;
+}
+
+.zoomStepButton span {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.iconButtonPrimary {
+  color: var(--color-accent);
+}
+
+.iconButtonBlue {
+  color: var(--color-accent);
+}
+
+.transport,
+.utilityGroup,
+.zoomGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.transport .iconButton,
+.transport .iconButtonPrimary {
+  width: 30px;
+  height: 32px;
+}
+
+.transport {
+  gap: 0;
+}
+
+.transport .iconButton + .iconButton,
+.transport .iconButton + .iconButtonPrimary,
+.transport .iconButtonPrimary + .iconButton,
+.transport .iconButtonPrimary + .iconButtonPrimary {
+  margin-left: -1px;
+}
+
+.renderActions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.discardLabel {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #202020;
+  cursor: pointer;
+}
+
+.renderButton {
+  border: 1px solid #02ce54;
+  background: #03ef62;
+  color: #000000;
+  border-radius: 6px;
+  height: 32px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.renderButton:hover {
+  background: #24f576;
+}
+
+.renderButton:active {
+  background: #01d856;
+  transform: translateY(1px);
+}
+
+.renderButton svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 1180px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .leftGroup,
+  .centerGroup {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

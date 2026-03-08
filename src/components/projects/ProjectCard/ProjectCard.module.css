@@ -1,0 +1,155 @@
+.projectCard {
+  display: grid;
+  gap: 8px;
+  padding: 18px 18px 14px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--panel);
+  border: 1px solid #d5dde9;
+  border-radius: 10px;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.projectCard:hover {
+  border-color: #c4cfdd;
+  box-shadow: 0 8px 20px rgb(17 26 42 / 7%);
+}
+
+.projectCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.projectCardLogo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.logoSports {
+  background: linear-gradient(135deg, #f8d731 0%, #f3bc07 100%);
+  color: #111319;
+}
+
+.logoHomechoice {
+  background: linear-gradient(135deg, #2f3140 0%, #54596f 100%);
+  color: #ffcb4b;
+  font-size: 20px;
+}
+
+.logoPodcast {
+  background: linear-gradient(135deg, #6f5de7 0%, #2b7bff 100%);
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.projectDots {
+  border: none;
+  background: transparent;
+  color: #c9d0dc;
+  width: 22px;
+  text-align: right;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.projectCardTitle {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #2d3648;
+}
+
+.projectCardWorkspace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #9aa5b6;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.projectCardWorkspace svg {
+  width: 12px;
+  height: 12px;
+}
+
+.projectCardDescription {
+  color: #748196;
+  min-height: 34px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.latestVideosBlock {
+  margin-top: 4px;
+  position: relative;
+}
+
+.latestVideosTitle {
+  font-size: 11px;
+  color: #9ca7b7;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
+}
+
+.latestVideosViewport {
+  position: relative;
+  height: 98px;
+  overflow: hidden;
+}
+
+.latestVideosList {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.latestVideoItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: none;
+  border-top: 1px solid #e6ebf2;
+  border-radius: 0;
+  background: transparent;
+  color: #6f7b8f;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.latestVideoItem:last-child {
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.latestVideoItem svg {
+  width: 12px;
+  height: 12px;
+  color: #94a0b2;
+}
+
+.latestVideoItem span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.latestVideosFog {
+  position: absolute;
+  inset: auto 0 0;
+  height: 30px;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0%) 0%, #fff 75%);
+}
