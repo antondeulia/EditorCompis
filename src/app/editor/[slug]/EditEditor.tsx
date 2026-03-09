@@ -99,6 +99,17 @@ type TimelineDragState =
       startClientX: number;
     };
 
+type SelectedTimelineTrack =
+  | {
+      kind: "scene";
+      sceneId: string;
+    }
+  | {
+      kind: "element";
+      sceneId: string;
+      elementIndex: number;
+    };
+
 const transportSeekStep = 5;
 const keyboardSeekStep = 1;
 const minTimelineZoom = 0;
@@ -701,6 +712,15 @@ function normalizeOverlayTimeline(schema: VideoSchema): VideoSchema {
   };
 }
 
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName;
+  return target.isContentEditable || tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+}
+
 export function EditEditor({ slug }: EditEditorProps) {
   const defaultSidebarWidth = 400;
   const defaultTimelineHeight = 290;
@@ -710,6 +730,7 @@ export function EditEditor({ slug }: EditEditorProps) {
   const timelineMainRef = useRef<HTMLDivElement | null>(null);
   const timelineTracksRef = useRef<HTMLDivElement | null>(null);
   const pendingTimelineScrollLeftRef = useRef<number | null>(null);
+  const suppressTrackClickUntilRef = useRef(0);
   const assetUploadInputRef = useRef<HTMLInputElement | null>(null);
   const assetsRef = useRef<AssetItem[]>([]);
   const leftRailResizeStateRef = useRef({ startX: 0, startWidth: defaultSidebarWidth });
@@ -721,6 +742,7 @@ export function EditEditor({ slug }: EditEditorProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [selectedTimelineTrack, setSelectedTimelineTrack] = useState<SelectedTimelineTrack | null>(null);
   const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [overlayResizeState, setOverlayResizeState] = useState<OverlayResizeState | null>(null);
@@ -1212,6 +1234,17 @@ export function EditEditor({ slug }: EditEditorProps) {
       scenes: prev.scenes.filter((scene) => scene.id !== sceneId),
     }));
     setSelectedElementKey((prev) => (prev?.startsWith(`${sceneId}:`) ? null : prev));
+    setSelectedTimelineTrack((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      if (prev.sceneId !== sceneId) {
+        return prev;
+      }
+
+      return null;
+    });
   }, []);
 
   const deleteElementTrack = useCallback((sceneId: string, elementIndex: number) => {
@@ -1228,7 +1261,130 @@ export function EditEditor({ slug }: EditEditorProps) {
         };
       }),
     }));
-    setSelectedElementKey((prev) => (prev === `${sceneId}:${elementIndex}` ? null : prev));
+    setSelectedElementKey((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      const [selectedSceneId, selectedIndexToken] = prev.split(":");
+      const selectedIndex = Number(selectedIndexToken);
+      if (selectedSceneId !== sceneId || !Number.isInteger(selectedIndex)) {
+        return prev;
+      }
+
+      if (selectedIndex === elementIndex) {
+        return null;
+      }
+
+      if (selectedIndex > elementIndex) {
+        return `${sceneId}:${selectedIndex - 1}`;
+      }
+
+      return prev;
+    });
+    setSelectedTimelineTrack((prev) => {
+      if (!prev || prev.kind !== "element" || prev.sceneId !== sceneId) {
+        return prev;
+      }
+
+      if (prev.elementIndex === elementIndex) {
+        return null;
+      }
+
+      if (prev.elementIndex > elementIndex) {
+        return {
+          ...prev,
+          elementIndex: prev.elementIndex - 1,
+        };
+      }
+
+      return prev;
+    });
+  }, []);
+
+  const splitElementTrack = useCallback((sceneId: string, elementIndex: number, splitFrame: number) => {
+    let nextSelected: SelectedTimelineTrack | null = null;
+
+    setVideoSchema((prev) => ({
+      ...prev,
+      scenes: prev.scenes.map((scene) => {
+        if (scene.id !== sceneId) {
+          return scene;
+        }
+
+        const targetElement = scene.elements[elementIndex];
+        if (!targetElement || !editableOverlayKinds.has(targetElement.kind)) {
+          return scene;
+        }
+
+        const elementStartFrame = getElementTimelineStart(scene.startFrame, targetElement);
+        const elementEndFrame = elementStartFrame + Math.max(1, targetElement.durationInFrames);
+        if (splitFrame <= elementStartFrame || splitFrame >= elementEndFrame) {
+          return scene;
+        }
+
+        const firstDuration = splitFrame - elementStartFrame;
+        const secondDuration = elementEndFrame - splitFrame;
+        if (firstDuration < 1 || secondDuration < 1) {
+          return scene;
+        }
+
+        const nextElements = [...scene.elements];
+        const firstPart: VideoElement = {
+          ...targetElement,
+          durationInFrames: firstDuration,
+        };
+        const secondPart: VideoElement = {
+          ...targetElement,
+          id: `${targetElement.id}-part-${Date.now().toString(36)}`,
+          timelineStartFrame: splitFrame,
+          durationInFrames: secondDuration,
+        };
+
+        nextElements.splice(elementIndex, 1, firstPart, secondPart);
+        nextSelected = {
+          kind: "element",
+          sceneId,
+          elementIndex: elementIndex + 1,
+        };
+
+        return {
+          ...scene,
+          elements: nextElements,
+        };
+      }),
+    }));
+
+    if (nextSelected?.kind === "element") {
+      setSelectedTimelineTrack(nextSelected);
+      setSelectedElementKey(`${nextSelected.sceneId}:${nextSelected.elementIndex}`);
+    }
+  }, []);
+
+  const splitSelectedTimelineTrack = useCallback(() => {
+    if (!selectedTimelineTrack || selectedTimelineTrack.kind !== "element") {
+      return;
+    }
+
+    splitElementTrack(selectedTimelineTrack.sceneId, selectedTimelineTrack.elementIndex, currentFrame);
+  }, [currentFrame, selectedTimelineTrack, splitElementTrack]);
+
+  const deleteSelectedTimelineTrack = useCallback(() => {
+    if (!selectedTimelineTrack) {
+      return;
+    }
+
+    if (selectedTimelineTrack.kind === "scene") {
+      deleteSceneTrack(selectedTimelineTrack.sceneId);
+      return;
+    }
+
+    deleteElementTrack(selectedTimelineTrack.sceneId, selectedTimelineTrack.elementIndex);
+  }, [deleteElementTrack, deleteSceneTrack, selectedTimelineTrack]);
+
+  const clearSelectionFocus = useCallback(() => {
+    setSelectedTimelineTrack(null);
+    setSelectedElementKey(null);
   }, []);
 
   const updateSelectedTextElement = useCallback(
@@ -1266,6 +1422,18 @@ export function EditEditor({ slug }: EditEditorProps) {
     (event: PointerEvent<HTMLElement>, state: TimelineDragState) => {
       event.preventDefault();
       event.stopPropagation();
+      if (state.kind === "scene") {
+        setSelectedTimelineTrack({ kind: "scene", sceneId: state.sceneId });
+        setSelectedElementKey(null);
+      } else {
+        setSelectedTimelineTrack({
+          kind: "element",
+          sceneId: state.sceneId,
+          elementIndex: state.elementIndex,
+        });
+        setSelectedElementKey(`${state.sceneId}:${state.elementIndex}`);
+      }
+
       setTimelineDragState(state);
     },
     [],
@@ -1277,6 +1445,7 @@ export function EditEditor({ slug }: EditEditorProps) {
     }
 
     const drag = timelineDragState;
+    let hasMoved = false;
 
     function handlePointerMove(event: globalThis.PointerEvent) {
       const scrub = scrubZoneRef.current;
@@ -1286,6 +1455,9 @@ export function EditEditor({ slug }: EditEditorProps) {
 
       const width = Math.max(scrub.getBoundingClientRect().width, 1);
       const deltaFrames = Math.round(((event.clientX - drag.startClientX) / width) * durationInFrames);
+      if (deltaFrames !== 0) {
+        hasMoved = true;
+      }
 
       if (drag.kind === "scene") {
         setVideoSchema((prev) => ({
@@ -1338,6 +1510,9 @@ export function EditEditor({ slug }: EditEditorProps) {
     }
 
     function stopDragging() {
+      if (hasMoved) {
+        suppressTrackClickUntilRef.current = Date.now() + 150;
+      }
       setTimelineDragState(null);
     }
 
@@ -1376,6 +1551,11 @@ export function EditEditor({ slug }: EditEditorProps) {
       }
 
       setSelectedElementKey(`${sceneId}:${elementIndex}`);
+      setSelectedTimelineTrack({
+        kind: "element",
+        sceneId,
+        elementIndex,
+      });
       setDragState({
         sceneId,
         elementIndex,
@@ -1539,6 +1719,10 @@ export function EditEditor({ slug }: EditEditorProps) {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) {
+        return;
+      }
+
       if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }
@@ -1558,6 +1742,18 @@ export function EditEditor({ slug }: EditEditorProps) {
       if (event.code === "ArrowRight") {
         event.preventDefault();
         seekBy(keyboardSeekStep);
+        return;
+      }
+
+      if (event.code === "KeyB") {
+        event.preventDefault();
+        splitSelectedTimelineTrack();
+        return;
+      }
+
+      if (event.code === "Backspace" || event.code === "Delete") {
+        event.preventDefault();
+        deleteSelectedTimelineTrack();
       }
     }
 
@@ -1566,7 +1762,7 @@ export function EditEditor({ slug }: EditEditorProps) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [seekBy, togglePlay]);
+  }, [deleteSelectedTimelineTrack, seekBy, splitSelectedTimelineTrack, togglePlay]);
 
   function rewind() {
     seekBy(-transportSeekStep);
@@ -1923,6 +2119,18 @@ export function EditEditor({ slug }: EditEditorProps) {
           "--right-sidebar-panel-width": isRightSidebarPanelOpen ? "340px" : "0px",
         } as CSSProperties
       }
+      onPointerDownCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        if (target.closest("[data-selection-anchor='true']")) {
+          return;
+        }
+
+        clearSelectionFocus();
+      }}
     >
       <header className={styles.topBar}>
         <nav className={styles.menuBar} aria-label="Editor menu">
@@ -2315,6 +2523,7 @@ export function EditEditor({ slug }: EditEditorProps) {
                     }
 
                     setSelectedElementKey(null);
+                    setSelectedTimelineTrack(null);
                     setDragState(null);
                     setOverlayResizeState(null);
                   }}
@@ -2334,6 +2543,7 @@ export function EditEditor({ slug }: EditEditorProps) {
                         type="button"
                         className={`${styles.overlayHandle} ${isSelected ? styles.overlayHandleSelected : ""}`}
                         style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }}
+                        data-selection-anchor="true"
                         data-overlay-item="true"
                         onPointerDown={(event) =>
                           startOverlayDrag(event, sceneId, elementIndex, element, renderedX, renderedY)
@@ -2342,6 +2552,11 @@ export function EditEditor({ slug }: EditEditorProps) {
                           event.preventDefault();
                           event.stopPropagation();
                           setSelectedElementKey(key);
+                          setSelectedTimelineTrack({
+                            kind: "element",
+                            sceneId,
+                            elementIndex,
+                          });
                         }}
                         title={title}
                         aria-label={`Drag ${title}`}
@@ -2439,57 +2654,70 @@ export function EditEditor({ slug }: EditEditorProps) {
                 onPointerDown={(event) => beginScrub(event.clientX)}
                 aria-label="Seek timeline"
               />
-              {sceneTracks.map((track) => (
-                <div className={styles.trackRow} key={`scene-${track.id}`}>
-                  <div className={styles.trackLane}>
-                    <div
-                      className={`${styles.clip} ${styles.sceneClip}`}
-                      style={{
-                        left: `${track.start * timelineZoomScale}%`,
-                        width: `${track.width * timelineZoomScale}%`,
-                      }}
-                      onPointerDown={(event) =>
-                        beginTimelineClipDrag(event, {
-                          kind: "scene",
-                          sceneId: track.id,
-                          startFrame: track.startFrame,
-                          startClientX: event.clientX,
-                        })
-                      }
-                      onClick={() => seekToFrame(track.startFrame)}
-                    >
-                      {renderTrackVisual({
-                        kind: track.visualKind,
-                        title: track.name,
-                        src: track.previewSrc,
-                        waveformSeed: track.id,
-                        durationInFrames: track.durationInFrames,
-                        fps,
-                      })}
-                      <span className={styles.clipTitle}>
-                        {track.name} ({track.meta})
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.clipDeleteButton}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
+              {sceneTracks.map((track) => {
+                const isSelected =
+                  selectedTimelineTrack?.kind === "scene" && selectedTimelineTrack.sceneId === track.id;
+
+                return (
+                  <div className={styles.trackRow} key={`scene-${track.id}`}>
+                    <div className={styles.trackLane}>
+                      <div
+                        className={`${styles.clip} ${styles.sceneClip} ${isSelected ? styles.sceneClipSelected : ""}`}
+                        style={{
+                          left: `${track.start * timelineZoomScale}%`,
+                          width: `${track.width * timelineZoomScale}%`,
                         }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          deleteSceneTrack(track.id);
+                        data-selection-anchor="true"
+                        onPointerDown={(event) =>
+                          beginTimelineClipDrag(event, {
+                            kind: "scene",
+                            sceneId: track.id,
+                            startFrame: track.startFrame,
+                            startClientX: event.clientX,
+                          })
+                        }
+                        onClick={() => {
+                          if (Date.now() < suppressTrackClickUntilRef.current) {
+                            return;
+                          }
+
+                          setSelectedTimelineTrack({ kind: "scene", sceneId: track.id });
+                          setSelectedElementKey(null);
                         }}
-                        aria-label={`Delete ${track.name} track`}
-                        title="Delete track"
                       >
-                        x
-                      </button>
+                        {renderTrackVisual({
+                          kind: track.visualKind,
+                          title: track.name,
+                          src: track.previewSrc,
+                          waveformSeed: track.id,
+                          durationInFrames: track.durationInFrames,
+                          fps,
+                        })}
+                        <span className={styles.clipTitle}>
+                          {track.name} ({track.meta})
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.clipDeleteButton}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            deleteSceneTrack(track.id);
+                          }}
+                          aria-label={`Delete ${track.name} track`}
+                          title="Delete track"
+                        >
+                          x
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {overlayTracks.map((track) => {
                 const trackKey = `${track.sceneId}:${track.elementIndex}`;
                 const isSelected = selectedElementKey === trackKey;
@@ -2503,9 +2731,18 @@ export function EditEditor({ slug }: EditEditorProps) {
                           left: `${track.start * timelineZoomScale}%`,
                           width: `${track.width * timelineZoomScale}%`,
                       }}
+                        data-selection-anchor="true"
                         onClick={() => {
+                          if (Date.now() < suppressTrackClickUntilRef.current) {
+                            return;
+                          }
+
+                          setSelectedTimelineTrack({
+                            kind: "element",
+                            sceneId: track.sceneId,
+                            elementIndex: track.elementIndex,
+                          });
                           setSelectedElementKey(trackKey);
-                          seekToFrame(track.startFrame);
                         }}
                         onPointerDown={(event) =>
                           beginTimelineClipDrag(event, {
@@ -2545,6 +2782,25 @@ export function EditEditor({ slug }: EditEditorProps) {
                         >
                           x
                         </button>
+                        {isSelected ? (
+                          <button
+                            type="button"
+                            className={styles.clipSplitButton}
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              splitElementTrack(track.sceneId, track.elementIndex, currentFrame);
+                            }}
+                            aria-label={`Split ${track.elementKind} track at playhead`}
+                            title="Split at playhead"
+                          >
+                            split
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </div>

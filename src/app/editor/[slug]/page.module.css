@@ -1357,8 +1357,8 @@
   padding: 0;
   border-radius: 0;
   overflow: hidden;
-  border: 1px solid rgba(31, 42, 60, 0.16);
-  background: #1c2431;
+  border: 1px solid rgba(31, 42, 60, 0.18);
+  background: #1b2535;
   box-shadow: 0 2px 10px rgba(10, 15, 26, 0.2);
   cursor: pointer;
   pointer-events: auto;
@@ -1389,20 +1389,28 @@
 }
 
 .sceneClip {
-  border-color: rgba(31, 42, 60, 0.25);
+  border-color: rgba(37, 62, 104, 0.55);
+  background: linear-gradient(180deg, #223b63 0%, #162743 100%);
 }
 
 .elementClip {
-  border-color: rgba(27, 40, 64, 0.38);
+  border-color: rgba(125, 93, 16, 0.5);
+  background: linear-gradient(180deg, #d9c58f 0%, #bca568 100%);
   top: 3px;
   bottom: 3px;
   border-radius: 6px;
 }
 
+.sceneClipSelected {
+  box-shadow:
+    0 0 0 1px rgba(116, 201, 255, 0.75) inset,
+    0 0 0 1px rgba(116, 201, 255, 0.5);
+}
+
 .elementClipSelected {
   box-shadow:
-    0 0 0 1px rgba(88, 193, 255, 0.7) inset,
-    0 0 0 1px rgba(88, 193, 255, 0.45);
+    0 0 0 1px rgba(53, 132, 192, 0.78) inset,
+    0 0 0 1px rgba(53, 132, 192, 0.52);
 }
 
 .clipFrames {
@@ -1501,12 +1509,43 @@
   position: absolute;
   left: 8px;
   bottom: 7px;
-  color: #ffffff;
+  color: #0f1f36;
   font-size: 11px;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.18);
   z-index: 2;
   pointer-events: none;
+}
+
+.sceneClip .clipTitle {
+  color: #e5efff;
+  text-shadow: 0 1px 2px rgba(4, 10, 18, 0.5);
+}
+
+.clipSplitButton {
+  position: absolute;
+  right: 26px;
+  top: 5px;
+  height: 16px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(12, 19, 34, 0.74);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  text-transform: uppercase;
+}
+
+.clipSplitButton:hover {
+  background: rgba(34, 114, 196, 0.9);
 }
 
 .playhead {
