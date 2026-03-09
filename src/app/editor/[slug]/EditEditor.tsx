@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   CSSProperties,
   ChangeEvent,
+  ReactNode,
   PointerEvent,
   useCallback,
   useEffect,
@@ -54,8 +55,11 @@ type OverlayTrack = {
   start: number;
   width: number;
   meta: string;
-  color: string;
+  visualKind: TrackVisualKind;
+  previewSrc?: string;
 };
+
+type TrackVisualKind = "video" | "audio" | "text" | "shape" | "image";
 
 type DragState = {
   sceneId: string;
@@ -572,20 +576,97 @@ function getElementLabel(element: VideoElement) {
   return element.src.split("/").pop() ?? "Video";
 }
 
-function getElementTrackGradient(kind: VideoElement["kind"]) {
-  if (kind === "text") {
-    return "#de623c";
+function getScenePrimaryElement(scene: VideoSchema["scenes"][number]) {
+  return scene.elements.find((element) => element.kind === "video")
+    ?? scene.elements.find((element) => element.kind === "image")
+    ?? scene.elements.find((element) => element.kind === "text")
+    ?? scene.elements.find((element) => element.kind === "shape")
+    ?? null;
+}
+
+function getWaveformSeed(input: string) {
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function buildWaveformBars(seedInput: string, barsCount: number) {
+  const seed = getWaveformSeed(seedInput);
+  return Array.from({ length: barsCount }, (_, index) => {
+    const noise = Math.abs(Math.sin(seed * 0.013 + index * 0.77));
+    return 20 + Math.round(noise * 72);
+  });
+}
+
+const waveformBarsCache = new Map<string, number[]>();
+
+function getWaveformBars(seedInput: string, barsCount: number) {
+  const cacheKey = `${seedInput}:${barsCount}`;
+  const cached = waveformBarsCache.get(cacheKey);
+  if (cached) {
+    return cached;
   }
 
-  if (kind === "shape") {
-    return "#2f92d8";
+  const nextBars = buildWaveformBars(seedInput, barsCount);
+  waveformBarsCache.set(cacheKey, nextBars);
+  return nextBars;
+}
+
+function renderTrackVisual(params: {
+  kind: TrackVisualKind;
+  title: string;
+  src?: string;
+  waveformSeed?: string;
+  durationInFrames?: number;
+  fps?: number;
+}): ReactNode {
+  if (params.kind === "video" || params.kind === "image") {
+    const frameCount = 6;
+
+    return (
+      <div className={styles.clipFrames}>
+        {Array.from({ length: frameCount }, (_, index) => (
+          <span key={index} className={styles.clipFrame}>
+            {params.src ? (
+              params.kind === "video" ? (
+                <video
+                  className={styles.clipFrameVideo}
+                  src={
+                    params.durationInFrames && params.fps
+                      ? `${params.src}#t=${(((index + 0.5) / frameCount) * (params.durationInFrames / params.fps)).toFixed(2)}`
+                      : params.src
+                  }
+                  muted
+                  preload="none"
+                  playsInline
+                />
+              ) : (
+                <span className={styles.clipFrameImage} style={{ backgroundImage: `url("${params.src}")` }} />
+              )
+            ) : (
+              <span className={styles.clipFrameFallback} />
+            )}
+          </span>
+        ))}
+      </div>
+    );
   }
 
-  if (kind === "image") {
-    return "#18b36a";
+  if (params.kind === "audio") {
+    const bars = getWaveformBars(params.waveformSeed ?? params.title, 42);
+    return (
+      <div className={styles.audioWave}>
+        {bars.map((height, index) => (
+          <span key={index} className={styles.audioWaveBar} style={{ height: `${height}%` }} />
+        ))}
+      </div>
+    );
   }
 
-  return "#7f4dff";
+  return <div className={styles.textTrackFill}>{params.title}</div>;
 }
 
 function getElementTimelineStart(sceneStartFrame: number, element: VideoElement) {
@@ -674,18 +755,28 @@ export function EditEditor({ slug }: EditEditorProps) {
   );
 
   const sceneTracks = useMemo(() => {
-    const colors = ["#6f3fe8", "#2f92d8", "#1fb86f", "#e17342"] as const;
-
-    return videoSchema.scenes.map((scene, index) => ({
-      id: scene.id,
-      name: scene.name,
-      startFrame: scene.startFrame,
-      durationInFrames: scene.durationInFrames,
-      start: (scene.startFrame / durationInFrames) * 100,
-      width: (scene.durationInFrames / durationInFrames) * 100,
-      color: colors[index % colors.length],
-      meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
-    }));
+    return videoSchema.scenes.map((scene) => {
+      const primaryElement = getScenePrimaryElement(scene);
+      const visualKind: TrackVisualKind =
+        primaryElement?.kind === "video" || primaryElement?.kind === "image"
+          ? primaryElement.kind
+          : primaryElement?.kind === "text"
+            ? "text"
+            : "shape";
+      const previewSrc =
+        primaryElement?.kind === "video" || primaryElement?.kind === "image" ? primaryElement.src : undefined;
+      return {
+        id: scene.id,
+        name: scene.name,
+        startFrame: scene.startFrame,
+        durationInFrames: scene.durationInFrames,
+        start: (scene.startFrame / durationInFrames) * 100,
+        width: (scene.durationInFrames / durationInFrames) * 100,
+        meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
+        visualKind,
+        previewSrc,
+      };
+    });
   }, [durationInFrames, fps, videoSchema.scenes]);
 
   const overlayTracks = useMemo(() => {
@@ -712,7 +803,13 @@ export function EditEditor({ slug }: EditEditorProps) {
           start: (globalStartFrame / durationInFrames) * 100,
           width: (globalDuration / durationInFrames) * 100,
           meta: `${(globalDuration / fps).toFixed(1)}s`,
-          color: getElementTrackGradient(element.kind),
+          visualKind:
+            element.kind === "video" || element.kind === "image"
+              ? element.kind
+              : element.kind === "text"
+                ? "text"
+                : "shape",
+          previewSrc: element.kind === "video" || element.kind === "image" ? element.src : undefined,
         });
       });
     }
@@ -2243,9 +2340,14 @@ export function EditEditor({ slug }: EditEditorProps) {
                       }
                       onClick={() => seekToFrame(track.startFrame)}
                     >
-                      <div className={styles.clipFrames}>
-                        <span className={styles.clipFallback} style={{ background: track.color }} />
-                      </div>
+                      {renderTrackVisual({
+                        kind: track.visualKind,
+                        title: track.name,
+                        src: track.previewSrc,
+                        waveformSeed: track.id,
+                        durationInFrames: track.durationInFrames,
+                        fps,
+                      })}
                       <span className={styles.clipTitle}>
                         {track.name} ({track.meta})
                       </span>
@@ -2276,7 +2378,7 @@ export function EditEditor({ slug }: EditEditorProps) {
 
                 return (
                   <div className={styles.trackRow} key={`element-${trackKey}`}>
-                  <div className={styles.trackLane}>
+                    <div className={styles.trackLane}>
                       <div
                         className={`${styles.clip} ${styles.elementClip} ${isSelected ? styles.elementClipSelected : ""}`}
                         style={{
@@ -2297,9 +2399,14 @@ export function EditEditor({ slug }: EditEditorProps) {
                           })
                         }
                       >
-                        <div className={styles.clipFrames}>
-                          <span className={styles.clipFallback} style={{ background: track.color }} />
-                        </div>
+                        {renderTrackVisual({
+                          kind: track.visualKind,
+                          title: track.elementName,
+                          src: track.previewSrc,
+                          waveformSeed: track.elementId,
+                          durationInFrames: track.durationInFrames,
+                          fps,
+                        })}
                         <span className={styles.clipTitle}>
                           {track.elementKind}: {track.elementName} ({track.meta})
                         </span>
@@ -2321,10 +2428,17 @@ export function EditEditor({ slug }: EditEditorProps) {
                           x
                         </button>
                       </div>
+                    </div>
                   </div>
-                </div>
-              );
+                );
               })}
+              <div className={`${styles.trackRow} ${styles.newTrackRow}`}>
+                <div className={`${styles.trackLane} ${styles.newTrackLane}`}>
+                  <button type="button" className={styles.newTrackButton} onClick={addTextTrack}>
+                    + New
+                  </button>
+                </div>
+              </div>
               <div className={styles.playheadLayer}>
                 <button
                   type="button"

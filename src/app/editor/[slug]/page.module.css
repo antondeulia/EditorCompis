@@ -1167,6 +1167,7 @@
 
 .timelineBody {
   height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns:
     minmax(var(--inspector-min, 250px), min(50%, var(--inspector-width, 360px))) minmax(0, 1fr);
@@ -1174,6 +1175,7 @@
 
 .timelineMain {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-rows: var(--timeline-actions-height) var(--timeline-header-height) 1fr;
 }
@@ -1255,7 +1257,8 @@
   grid-auto-rows: 36px;
   padding: 8px var(--timeline-side-padding);
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #edf1f6;
 }
 
@@ -1289,6 +1292,35 @@
 .trackLane {
   position: relative;
   height: 100%;
+}
+
+.newTrackRow {
+  border-bottom: 0;
+}
+
+.newTrackLane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newTrackButton {
+  pointer-events: auto;
+  height: 28px;
+  min-width: 96px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px dashed rgba(82, 98, 124, 0.58);
+  background: rgba(255, 255, 255, 0.78);
+  color: #44536b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.newTrackButton:hover {
+  border-color: rgba(72, 91, 122, 0.9);
+  background: #ffffff;
 }
 
 .clip {
@@ -1351,17 +1383,85 @@
   height: 100%;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(52px, 1fr);
+  grid-auto-columns: minmax(48px, 1fr);
 }
 
 .clipFrame {
+  position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  display: block;
+  border-right: 1px solid rgba(11, 18, 30, 0.24);
+}
+
+.clipFrameVideo,
+.clipFrameImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: saturate(0.94) contrast(1.08) brightness(0.94);
+}
+
+.clipFrameVideo {
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.clipFrameImage {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+}
+
+.clipFrameFallback {
+  width: 100%;
+  height: 100%;
   display: block;
-  filter: saturate(0.98) contrast(1.04);
+  background:
+    linear-gradient(90deg, rgba(12, 18, 31, 0.44), rgba(12, 18, 31, 0.2)),
+    repeating-linear-gradient(
+      45deg,
+      rgba(98, 119, 153, 0.36) 0,
+      rgba(98, 119, 153, 0.36) 10px,
+      rgba(69, 88, 119, 0.3) 10px,
+      rgba(69, 88, 119, 0.3) 20px
+    );
+}
+
+.audioWave {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(2px, 1fr);
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  background: linear-gradient(180deg, #193245 0%, #101f2d 100%);
+}
+
+.audioWaveBar {
+  display: block;
+  width: 100%;
+  align-self: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9fdcff 0%, #42b4ff 100%);
+  opacity: 0.9;
+}
+
+.textTrackFill {
+  width: 100%;
+  height: 100%;
+  padding: 7px 10px;
+  color: #2d2310;
+  background: linear-gradient(180deg, #e7d8a8 0%, #d5c08a 100%);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .clipFallback {
