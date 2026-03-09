@@ -1627,8 +1627,8 @@
 
 .playheadLayer {
   position: absolute;
-  left: var(--timeline-side-padding);
-  right: calc(var(--timeline-side-padding) + var(--timeline-right-gap));
+  left: 0;
+  right: 0;
   top: 0;
   bottom: 0;
   z-index: 6;

@@ -77,8 +77,7 @@ export function useEditorPlaybackController({
   const timelineFrameSpan = baseTimelineFrameSpan + timelineExtraFrames;
   const timelineDurationSeconds = timelineFrameSpan / fps;
   const currentTime = currentFrame / fps;
-  const maxPlayheadFrame = Math.max(timelineFrameSpan - 1, 0);
-  const progress = maxPlayheadFrame > 0 ? clamp(currentFrame / maxPlayheadFrame, 0, 1) : 0;
+  const progress = timelineFrameSpan > 0 ? clamp(currentFrame / timelineFrameSpan, 0, 1) : 0;
   const timelineZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
   const timelineSpanRatio = durationInFrames > 0 ? timelineFrameSpan / durationInFrames : 1;
   const timelineContentWidth = `${timelineZoomScale * timelineSpanRatio * 100}%`;
@@ -122,7 +121,7 @@ export function useEditorPlaybackController({
         return;
       }
 
-      const boundedFrame = clamp(Math.round(nextFrame), 0, Math.max(durationInFrames - 1, 0));
+      const boundedFrame = clamp(Math.floor(nextFrame), 0, Math.max(durationInFrames - 1, 0));
       player.seekTo(boundedFrame);
       setCurrentFrame(boundedFrame);
     },
