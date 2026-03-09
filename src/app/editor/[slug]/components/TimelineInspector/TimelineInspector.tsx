@@ -3,13 +3,18 @@
 import { PointerEvent } from "react";
 import styles from "./TimelineInspector.module.css";
 
+type TimelineInspectorRow = {
+  id: string;
+  label: string;
+  meta: string;
+};
+
 type TimelineInspectorProps = {
   currentTimeLabel: string;
   isResizing: boolean;
   onResizeStart: (event: PointerEvent<HTMLButtonElement>) => void;
+  rows: TimelineInspectorRow[];
 };
-
-const sequenceRows = ["Main.tsx:54", "Main.tsx:54", "Main.tsx:54", "Main.tsx:54"];
 
 function EyeIcon() {
   return (
@@ -20,11 +25,7 @@ function EyeIcon() {
   );
 }
 
-export function TimelineInspector({
-  currentTimeLabel,
-  isResizing,
-  onResizeStart,
-}: TimelineInspectorProps) {
+export function TimelineInspector({ currentTimeLabel, isResizing, onResizeStart, rows }: TimelineInspectorProps) {
   return (
     <aside className={styles.panel} aria-label="Timeline inspector">
       <button
@@ -37,11 +38,11 @@ export function TimelineInspector({
         <span>{currentTimeLabel}</span>
       </header>
       <div className={styles.list}>
-        {sequenceRows.map((meta, index) => (
-          <div key={`${meta}-${index}`} className={styles.row}>
+        {rows.map((row) => (
+          <div key={row.id} className={styles.row}>
             <EyeIcon />
-            <span className={styles.sequenceLabel}>{"<Series.Sequence>"}</span>
-            <span className={styles.sequenceMeta}>{meta}</span>
+            <span className={styles.sequenceLabel}>{row.label}</span>
+            <span className={styles.sequenceMeta}>{row.meta}</span>
           </div>
         ))}
       </div>
