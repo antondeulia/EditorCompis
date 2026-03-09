@@ -8,6 +8,7 @@
   gap: 12px;
   min-height: 52px;
   padding: 0 12px;
+  margin-right: var(--right-sidebar-width, 0px);
 }
 
 .leftGroup {

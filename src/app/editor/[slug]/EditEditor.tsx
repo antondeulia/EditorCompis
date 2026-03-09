@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { CSSProperties, ChangeEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  ChangeEvent,
+  PointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { PlaybackToolbar } from "./components/PlaybackToolbar/PlaybackToolbar";
 import { TimelineInspector } from "./components/TimelineInspector/TimelineInspector";
 import styles from "./page.module.css";
@@ -34,6 +43,14 @@ const initialAssets: AssetItem[] = [
   { id: "asset-2", name: "music-track.wav", kind: "audio", sizeLabel: "Audio" },
   { id: "asset-3", name: "captions.srt", kind: "other", sizeLabel: "Subtitle" },
 ];
+const rightSidebarSections = [
+  "Project",
+  "AI Tools",
+  "Properties",
+  "Elements",
+  "Captions",
+  "Media",
+] as const;
 
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -67,6 +84,141 @@ function formatTime(seconds: number) {
   ).padStart(2, "0")}`;
 }
 
+function waitForSeek(video: HTMLVideoElement) {
+  return new Promise<void>((resolve) => {
+    const onSeeked = () => {
+      video.removeEventListener("seeked", onSeeked);
+      resolve();
+    };
+
+    video.addEventListener("seeked", onSeeked, { once: true });
+  });
+}
+
+async function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.72) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
+  });
+}
+
+function percentToRatio(value: string) {
+  const parsed = Number.parseFloat(value);
+
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.min(Math.max(parsed / 100, 0), 1);
+}
+
+async function extractTimelineFrames(
+  sourceVideo: HTMLVideoElement,
+  segmentFramesConfig: { start: string; width: string; frameCount: number }[],
+  signal: AbortSignal,
+) {
+  const source = sourceVideo.currentSrc || sourceVideo.src;
+
+  if (!source) {
+    return [] as string[];
+  }
+
+  const workerVideo = document.createElement("video");
+  workerVideo.preload = "auto";
+  workerVideo.muted = true;
+  workerVideo.playsInline = true;
+  workerVideo.crossOrigin = "anonymous";
+  workerVideo.src = source;
+
+  await new Promise<void>((resolve, reject) => {
+    const onLoaded = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Failed to load video for timeline frames"));
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const cleanup = () => {
+      workerVideo.removeEventListener("loadedmetadata", onLoaded);
+      workerVideo.removeEventListener("error", onError);
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    workerVideo.addEventListener("loadedmetadata", onLoaded, { once: true });
+    workerVideo.addEventListener("error", onError, { once: true });
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+
+  if (signal.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
+  const videoDuration = Number.isFinite(workerVideo.duration) && workerVideo.duration > 0 ? workerVideo.duration : 0;
+  const frameWidth = 220;
+  const ratio = workerVideo.videoHeight > 0 ? workerVideo.videoWidth / workerVideo.videoHeight : 16 / 9;
+  const frameHeight = Math.max(1, Math.round(frameWidth / Math.max(ratio, 0.01)));
+  const canvas = document.createElement("canvas");
+  canvas.width = frameWidth;
+  canvas.height = frameHeight;
+
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    return [] as string[];
+  }
+
+  const urlsBySegment: string[][] = [];
+
+  for (const segment of segmentFramesConfig) {
+    if (signal.aborted) {
+      break;
+    }
+
+    const segmentUrls: string[] = [];
+    const startRatio = percentToRatio(segment.start);
+    const widthRatio = percentToRatio(segment.width);
+    const count = Math.max(1, segment.frameCount);
+
+    for (let frameIndex = 0; frameIndex < count; frameIndex += 1) {
+      if (signal.aborted) {
+        break;
+      }
+
+      const localProgress = count <= 1 ? 0.5 : (frameIndex + 0.5) / count;
+      const globalProgress = startRatio + widthRatio * localProgress;
+      const targetTime = videoDuration * Math.min(Math.max(globalProgress, 0), 1);
+
+      if (Math.abs(workerVideo.currentTime - targetTime) > 0.04) {
+        workerVideo.currentTime = targetTime;
+        await waitForSeek(workerVideo);
+      }
+
+      if (signal.aborted) {
+        break;
+      }
+
+      ctx.drawImage(workerVideo, 0, 0, frameWidth, frameHeight);
+      const blob = await canvasToBlob(canvas);
+
+      if (blob) {
+        segmentUrls.push(URL.createObjectURL(blob));
+      }
+    }
+
+    urlsBySegment.push(segmentUrls);
+  }
+
+  workerVideo.pause();
+  workerVideo.removeAttribute("src");
+  workerVideo.load();
+
+  return urlsBySegment;
+}
+
 export function EditEditor({ slug }: EditEditorProps) {
   const defaultSidebarWidth = 400;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -78,6 +230,7 @@ export function EditEditor({ slug }: EditEditorProps) {
   const resizeStateRef = useRef({ startX: 0, startWidth: defaultSidebarWidth });
   const animationFrameRef = useRef<number | null>(null);
   const chatScrollbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timelineFrameUrlsRef = useRef<string[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -91,6 +244,7 @@ export function EditEditor({ slug }: EditEditorProps) {
   const [activeLeftTab, setActiveLeftTab] = useState<"chat" | "assets">("chat");
   const [isChatScrollbarVisible, setIsChatScrollbarVisible] = useState(false);
   const [assets, setAssets] = useState<AssetItem[]>(initialAssets);
+  const [timelineFramesByTrack, setTimelineFramesByTrack] = useState<string[][]>([]);
 
   const progress = duration > 0 ? Math.min(currentTime / duration, 1) : 0;
   const timelineMarks = useMemo(
@@ -137,13 +291,23 @@ export function EditEditor({ slug }: EditEditorProps) {
       return;
     }
 
+    function syncDurationFromVideo() {
+      const nextDuration =
+        Number.isFinite(videoElement.duration) && videoElement.duration > 0 ? videoElement.duration : 0;
+      setDuration(nextDuration);
+      setCurrentTime(videoElement.currentTime || 0);
+    }
+
     function handleTimeUpdate() {
       setCurrentTime(videoElement.currentTime);
     }
 
     function handleLoadedMetadata() {
-      setDuration(videoElement.duration);
-      setCurrentTime(videoElement.currentTime || 0);
+      syncDurationFromVideo();
+    }
+
+    function handleDurationChange() {
+      syncDurationFromVideo();
     }
 
     function handlePlay() {
@@ -165,19 +329,100 @@ export function EditEditor({ slug }: EditEditorProps) {
 
     videoElement.addEventListener("timeupdate", handleTimeUpdate);
     videoElement.addEventListener("loadedmetadata", handleLoadedMetadata);
+    videoElement.addEventListener("durationchange", handleDurationChange);
     videoElement.addEventListener("play", handlePlay);
     videoElement.addEventListener("pause", handlePause);
     videoElement.addEventListener("ended", handleEnded);
+    syncDurationFromVideo();
 
     return () => {
       stopAnimationFrame();
       videoElement.removeEventListener("timeupdate", handleTimeUpdate);
       videoElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      videoElement.removeEventListener("durationchange", handleDurationChange);
       videoElement.removeEventListener("play", handlePlay);
       videoElement.removeEventListener("pause", handlePause);
       videoElement.removeEventListener("ended", handleEnded);
     };
   }, [startAnimationFrame, stopAnimationFrame]);
+
+  useEffect(() => {
+    const videoElement = videoRef.current;
+
+    if (!videoElement) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    const clearFrameUrls = () => {
+      for (const url of timelineFrameUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+      timelineFrameUrlsRef.current = [];
+    };
+
+    const createFrames = async () => {
+      const segmentFramesConfig = timelineSegments.map((segment) => {
+        const widthPercent = Number.parseFloat(segment.width);
+        const frameCount = Number.isFinite(widthPercent) ? Math.max(2, Math.round(widthPercent / 2.5)) : 8;
+
+        return {
+          start: segment.start,
+          width: segment.width,
+          frameCount,
+        };
+      });
+
+      try {
+        const frameUrlsBySegment = await extractTimelineFrames(
+          videoElement,
+          segmentFramesConfig,
+          abortController.signal,
+        );
+
+        if (abortController.signal.aborted) {
+          for (const segmentUrls of frameUrlsBySegment) {
+            for (const url of segmentUrls) {
+              URL.revokeObjectURL(url);
+            }
+          }
+          return;
+        }
+
+        clearFrameUrls();
+        timelineFrameUrlsRef.current = frameUrlsBySegment.flat();
+        setTimelineFramesByTrack(frameUrlsBySegment);
+      } catch {
+        if (!abortController.signal.aborted) {
+          clearFrameUrls();
+          setTimelineFramesByTrack([]);
+        }
+      }
+    };
+
+    if (videoElement.readyState >= 1) {
+      void createFrames();
+    } else {
+      const handleLoadedMetadata = () => {
+        void createFrames();
+      };
+
+      videoElement.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
+
+      return () => {
+        abortController.abort();
+        videoElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        clearFrameUrls();
+        setTimelineFramesByTrack([]);
+      };
+    }
+
+    return () => {
+      abortController.abort();
+      clearFrameUrls();
+      setTimelineFramesByTrack([]);
+    };
+  }, []);
 
   const seekBy = useCallback((deltaSeconds: number) => {
     const videoElement = videoRef.current;
@@ -489,6 +734,69 @@ export function EditEditor({ slug }: EditEditorProps) {
         </div>
       </header>
 
+      <aside className={styles.rightSidebar} aria-label="Editor tools">
+        <div className={styles.rightSidebarTop}>
+          {rightSidebarSections.map((section) => (
+            <button key={section} type="button" className={styles.rightSidebarItem}>
+              <span className={styles.rightSidebarIcon} aria-hidden="true">
+                {section === "Project" ? (
+                  <svg viewBox="0 0 20 20">
+                    <path d="M2.8 6.2a1.7 1.7 0 0 1 1.7-1.7h3.3l1.2 1.3h6.5a1.7 1.7 0 0 1 1.7 1.7v6.3a1.7 1.7 0 0 1-1.7 1.7H4.5a1.7 1.7 0 0 1-1.7-1.7V6.2Z" />
+                  </svg>
+                ) : null}
+                {section === "AI Tools" ? (
+                  <svg viewBox="0 0 20 20">
+                    <path d="M10 2.5l1.3 3.3 3.2 1.3-3.2 1.3L10 11.7 8.7 8.4 5.5 7.1l3.2-1.3L10 2.5Z" />
+                    <path d="M14.2 10.6l.8 1.8 1.8.8-1.8.8-.8 1.8-.8-1.8-1.8-.8 1.8-.8.8-1.8Z" />
+                  </svg>
+                ) : null}
+                {section === "Properties" ? (
+                  <svg viewBox="0 0 20 20">
+                    <path d="M6 3.5v4m0 9v-4m8-9v9m-4-5v9" />
+                    <circle cx="6" cy="9.2" r="1.4" />
+                    <circle cx="14" cy="14.2" r="1.4" />
+                    <circle cx="10" cy="5.8" r="1.4" />
+                  </svg>
+                ) : null}
+                {section === "Elements" ? (
+                  <svg viewBox="0 0 20 20">
+                    <rect x="3.5" y="3.5" width="4.2" height="4.2" rx="0.8" />
+                    <rect x="12.3" y="3.5" width="4.2" height="4.2" rx="0.8" />
+                    <rect x="7.9" y="12.3" width="4.2" height="4.2" rx="0.8" />
+                    <path d="M7.7 5.6h4.6M10 7.7v4.6" />
+                  </svg>
+                ) : null}
+                {section === "Captions" ? (
+                  <svg viewBox="0 0 20 20">
+                    <rect x="2.8" y="4" width="14.4" height="12" rx="2" />
+                    <path d="M6.5 8.8h4.8M6.5 11.7h3.2M13.8 9.6l3.4 2.4-3.4 2.4" />
+                  </svg>
+                ) : null}
+                {section === "Media" ? (
+                  <svg viewBox="0 0 20 20">
+                    <rect x="2.8" y="4" width="8.5" height="12" rx="1.8" />
+                    <path d="M7 8.2l2.6 1.8L7 11.8V8.2Z" />
+                    <path d="M13.1 6.3h4.1M13.1 10h4.1M13.1 13.7h4.1" />
+                  </svg>
+                ) : null}
+              </span>
+              <span>{section}</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className={`${styles.rightSidebarItem} ${styles.rightSidebarAgent}`}>
+          <span className={styles.rightSidebarIcon} aria-hidden="true">
+            <svg viewBox="0 0 20 20">
+              <rect x="5" y="7.2" width="10" height="7.8" rx="2" />
+              <circle cx="8" cy="11.1" r="0.9" />
+              <circle cx="12" cy="11.1" r="0.9" />
+              <path d="M10 3v2.2M3.7 10h1.8M14.5 10h1.8" />
+            </svg>
+          </span>
+          <span>Underlord</span>
+        </button>
+      </aside>
+
       <div
         className={styles.workspace}
         style={
@@ -731,7 +1039,22 @@ export function EditEditor({ slug }: EditEditorProps) {
                         left: timelineSegments[track].start,
                         width: timelineSegments[track].width,
                       }}
-                    />
+                    >
+                      <div className={styles.clipFrames}>
+                        {timelineFramesByTrack[track]?.length ? (
+                          timelineFramesByTrack[track].map((frameUrl, index) => (
+                            <span
+                              key={`${frameUrl}-${index}`}
+                              className={styles.clipFrame}
+                              style={{ backgroundImage: `url("${frameUrl}")` }}
+                              aria-hidden="true"
+                            />
+                          ))
+                        ) : (
+                          <span className={styles.clipFallback} />
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}

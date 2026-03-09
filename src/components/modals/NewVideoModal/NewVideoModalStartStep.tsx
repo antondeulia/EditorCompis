@@ -1,3 +1,4 @@
+import Image from "next/image";
 import styles from "./NewVideoModalStartStep.module.css";
 
 type NewVideoModalStartStepProps = {
@@ -20,44 +21,29 @@ export function NewVideoModalStartStep({
       <h2 className={styles.createVideoHeading}>How would you like to start?</h2>
       <div className={styles.createVideoOptions}>
         <button type="button" className={styles.createVideoOption} onClick={onBlankStart}>
-          <span className={styles.createVideoOptionIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M7 3h7l5 5v13H7V3Zm2 2v14h8V9h-4V5H9Zm6 0v2h2l-2-2Z"
-              />
-            </svg>
+          <span className={styles.createVideoOptionPreview} aria-hidden="true">
+            <Image src="/images/GenerateFromAPrompt.jpg" alt="" fill sizes="72px" />
           </span>
           <span className={styles.createVideoOptionText}>
-            <strong>Blank</strong>
-            <span>Start with a clean canvas for complete control.</span>
+            <strong>Generate from a prompt</strong>
+            <span>Describe your idea and start from AI-generated scenes.</span>
           </span>
         </button>
         <button type="button" className={styles.createVideoOption} onClick={onTemplateStart}>
-          <span className={styles.createVideoOptionIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3H4V5Zm0 5h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9Zm4 3a1 1 0 0 0 0 2h8a1 1 0 1 0 0-2H8Z"
-              />
-            </svg>
+          <span className={styles.createVideoOptionPreview} aria-hidden="true">
+            <Image src="/images/Template.jpg" alt="" fill sizes="72px" />
           </span>
           <span className={styles.createVideoOptionText}>
-            <strong>Choose from template</strong>
+            <strong>Template</strong>
             <span>Start from a ready-made layout and customize it.</span>
           </span>
         </button>
         <button type="button" className={styles.createVideoOption} onClick={onUploadClick}>
-          <span className={styles.createVideoOptionIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                d="M12 3c.6 0 1 .4 1 1v6.6l2.3-2.3 1.4 1.4-4.7 4.7-4.7-4.7 1.4-1.4 2.3 2.3V4c0-.6.4-1 1-1Zm-7 10h14a2 2 0 0 1 2 2v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3a2 2 0 0 1 2-2Zm0 2v3c0 .6.4 1 1 1h12c.6 0 1-.4 1-1v-3H5Z"
-              />
-            </svg>
+          <span className={styles.createVideoOptionPreview} aria-hidden="true">
+            <Image src="/images/UploadFile.jpg" alt="" fill sizes="72px" />
           </span>
           <span className={styles.createVideoOptionText}>
-            <strong>Upload Video</strong>
+            <strong>Upload file</strong>
             <span>Extract scenes and captions automatically.</span>
           </span>
         </button>
