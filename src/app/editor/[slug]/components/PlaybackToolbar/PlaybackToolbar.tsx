@@ -5,6 +5,9 @@ import styles from "./PlaybackToolbar.module.css";
 
 type PlaybackToolbarProps = {
   isPlaying: boolean;
+  zoom: number;
+  onZoomChange: (value: number) => void;
+  onZoomStep: (delta: number) => void;
   onTogglePlay: () => void;
   onRewind: () => void;
   onForward: () => void;
@@ -115,20 +118,22 @@ function IconRender() {
 
 export function PlaybackToolbar({
   isPlaying,
+  zoom,
+  onZoomChange,
+  onZoomStep,
   onTogglePlay,
   onRewind,
   onForward,
   onRender,
 }: PlaybackToolbarProps) {
-  const [zoom, setZoom] = useState(38);
   const [speed, setSpeed] = useState(speedOptions[1]);
 
   function adjustZoom(step: number) {
-    setZoom((prev) => Math.min(100, Math.max(0, prev + step)));
+    onZoomStep(step);
   }
 
   function handleZoomChange(event: ChangeEvent<HTMLInputElement>) {
-    setZoom(Number(event.target.value));
+    onZoomChange(Number(event.target.value));
   }
 
   return (

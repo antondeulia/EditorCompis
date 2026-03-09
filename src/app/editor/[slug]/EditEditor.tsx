@@ -101,6 +101,11 @@ type TimelineDragState =
 
 const transportSeekStep = 5;
 const keyboardSeekStep = 1;
+const minTimelineZoom = 0;
+const maxTimelineZoom = 100;
+const timelineScaleBase = 0.5;
+const timelineScaleSpan = 2.5;
+const wheelZoomStep = 0.0018;
 const rightSidebarSections = ["Project", "AI Tools", "Properties", "Elements", "Captions", "Media"] as const;
 type RightSidebarSection = (typeof rightSidebarSections)[number];
 type ElementsLibraryIcon =
@@ -666,7 +671,7 @@ function renderTrackVisual(params: {
     );
   }
 
-  return <div className={styles.textTrackFill}>{params.title}</div>;
+  return <div className={styles.textTrackFill} aria-hidden="true" />;
 }
 
 function getElementTimelineStart(sceneStartFrame: number, element: VideoElement) {
@@ -702,6 +707,9 @@ export function EditEditor({ slug }: EditEditorProps) {
   const playerRef = useRef<PlayerRef>(null);
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
   const scrubZoneRef = useRef<HTMLButtonElement | null>(null);
+  const timelineMainRef = useRef<HTMLDivElement | null>(null);
+  const timelineTracksRef = useRef<HTMLDivElement | null>(null);
+  const pendingTimelineScrollLeftRef = useRef<number | null>(null);
   const assetUploadInputRef = useRef<HTMLInputElement | null>(null);
   const assetsRef = useRef<AssetItem[]>([]);
   const leftRailResizeStateRef = useRef({ startX: 0, startWidth: defaultSidebarWidth });
@@ -718,7 +726,9 @@ export function EditEditor({ slug }: EditEditorProps) {
   const [overlayResizeState, setOverlayResizeState] = useState<OverlayResizeState | null>(null);
   const [timelineDragState, setTimelineDragState] = useState<TimelineDragState | null>(null);
   const [timelineHeight, setTimelineHeight] = useState(defaultTimelineHeight);
+  const [timelineZoom, setTimelineZoom] = useState(38);
   const [isTimelineResizing, setIsTimelineResizing] = useState(false);
+  const [timelinePlayheadMetrics, setTimelinePlayheadMetrics] = useState({ offsetLeft: 0, width: 1 });
   const [compositionViewport, setCompositionViewport] = useState<CompositionViewport>({
     left: 0,
     top: 0,
@@ -748,6 +758,8 @@ export function EditEditor({ slug }: EditEditorProps) {
   const currentTime = currentFrame / fps;
   const progress = durationInFrames > 0 ? Math.min(currentFrame / durationInFrames, 1) : 0;
   const boundedInspectorWidth = Math.max(inspectorWidth, 250);
+  const timelineZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
+  const playheadLeftPx = timelinePlayheadMetrics.offsetLeft + progress * timelinePlayheadMetrics.width;
 
   const timelineMarks = useMemo(
     () => Array.from({ length: 6 }, (_, i) => formatTime((durationSeconds * i) / 5)),
@@ -1568,6 +1580,113 @@ export function EditEditor({ slug }: EditEditorProps) {
     seekToFrame(nextTime * fps);
   }, [fps, seekToFrame]);
 
+  const handleTimelineZoomChange = useCallback((nextZoom: number) => {
+    setTimelineZoom(clamp(nextZoom, minTimelineZoom, maxTimelineZoom));
+  }, []);
+
+  const adjustTimelineZoom = useCallback((delta: number) => {
+    setTimelineZoom((prev) => clamp(prev + delta, minTimelineZoom, maxTimelineZoom));
+  }, []);
+
+  const applyTimelineWheelZoom = useCallback((deltaY: number, clientX: number) => {
+    const timelineElement = timelineTracksRef.current;
+    if (!timelineElement) {
+      return;
+    }
+
+    const rect = timelineElement.getBoundingClientRect();
+    const mouseX = clamp(clientX - rect.left, 0, rect.width);
+    const minScale = timelineScaleBase + (minTimelineZoom / 100) * timelineScaleSpan;
+    const maxScale = timelineScaleBase + (maxTimelineZoom / 100) * timelineScaleSpan;
+    const oldScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
+    const zoomFactor = Math.exp(-deltaY * wheelZoomStep);
+    const newScale = clamp(oldScale * zoomFactor, minScale, maxScale);
+
+    if (Math.abs(newScale - oldScale) < 0.0001) {
+      return;
+    }
+
+    const timeUnderCursor = (timelineElement.scrollLeft + mouseX) / oldScale;
+    const nextScrollLeft = Math.max(0, timeUnderCursor * newScale - mouseX);
+    pendingTimelineScrollLeftRef.current = nextScrollLeft;
+
+    const nextZoom = ((newScale - timelineScaleBase) / timelineScaleSpan) * 100;
+    setTimelineZoom(clamp(nextZoom, minTimelineZoom, maxTimelineZoom));
+  }, [timelineZoom]);
+
+  useLayoutEffect(() => {
+    const timelineElement = timelineTracksRef.current;
+    const timelineMainElement = timelineMainRef.current;
+    const scrubZoneElement = scrubZoneRef.current;
+
+    if (!timelineElement || !timelineMainElement || !scrubZoneElement) {
+      return;
+    }
+
+    function updatePlayheadMetrics() {
+      const scrubRect = scrubZoneElement.getBoundingClientRect();
+      const mainRect = timelineMainElement.getBoundingClientRect();
+      const nextOffsetLeft = scrubRect.left - mainRect.left;
+      const nextWidth = Math.max(scrubRect.width, 1);
+
+      setTimelinePlayheadMetrics((prev) => {
+        if (Math.abs(prev.offsetLeft - nextOffsetLeft) < 0.5 && Math.abs(prev.width - nextWidth) < 0.5) {
+          return prev;
+        }
+
+        return {
+          offsetLeft: nextOffsetLeft,
+          width: nextWidth,
+        };
+      });
+    }
+
+    updatePlayheadMetrics();
+    timelineElement.addEventListener("scroll", updatePlayheadMetrics, { passive: true });
+    window.addEventListener("resize", updatePlayheadMetrics);
+
+    return () => {
+      timelineElement.removeEventListener("scroll", updatePlayheadMetrics);
+      window.removeEventListener("resize", updatePlayheadMetrics);
+    };
+  }, [timelineZoom]);
+
+  useEffect(() => {
+    const timelineElement = timelineTracksRef.current;
+    if (!timelineElement) {
+      return;
+    }
+
+    function handleNativeWheel(event: globalThis.WheelEvent) {
+      if (!event.ctrlKey) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      applyTimelineWheelZoom(event.deltaY, event.clientX);
+    }
+
+    timelineElement.addEventListener("wheel", handleNativeWheel, { passive: false });
+
+    return () => {
+      timelineElement.removeEventListener("wheel", handleNativeWheel);
+    };
+  }, [applyTimelineWheelZoom]);
+
+  useLayoutEffect(() => {
+    const timelineElement = timelineTracksRef.current;
+    const pendingScrollLeft = pendingTimelineScrollLeftRef.current;
+
+    if (!timelineElement || pendingScrollLeft === null) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, timelineElement.scrollWidth - timelineElement.clientWidth);
+    timelineElement.scrollLeft = clamp(pendingScrollLeft, 0, maxScrollLeft);
+    pendingTimelineScrollLeftRef.current = null;
+  }, [timelineZoom]);
+
   const seekFromClientX = useCallback(
     (clientX: number) => {
       const scrubZoneElement = scrubZoneRef.current;
@@ -2262,6 +2381,9 @@ export function EditEditor({ slug }: EditEditorProps) {
 
       <PlaybackToolbar
         isPlaying={isPlaying}
+        zoom={timelineZoom}
+        onZoomChange={handleTimelineZoomChange}
+        onZoomStep={adjustTimelineZoom}
         onTogglePlay={togglePlay}
         onRewind={rewind}
         onForward={forward}
@@ -2292,18 +2414,13 @@ export function EditEditor({ slug }: EditEditorProps) {
               rows={inspectorRows}
             />
           ) : null}
-          <div className={styles.timelineMain}>
-            <div className={styles.timelineActions}>
-              <button type="button" className={styles.addTextTrackButton} onClick={addTextTrack}>
-                + Add Text
-              </button>
-            </div>
+          <div className={styles.timelineMain} ref={timelineMainRef}>
             <div className={styles.timelineHeader}>
               {timelineMarks.map((mark, index) => (
                 <span key={`${mark}-${index}`}>{mark}</span>
               ))}
             </div>
-            <div className={styles.tracks}>
+            <div className={styles.tracks} ref={timelineTracksRef}>
               <input
                 type="range"
                 min={0}
@@ -2318,6 +2435,7 @@ export function EditEditor({ slug }: EditEditorProps) {
                 type="button"
                 className={styles.timelineScrubZone}
                 ref={scrubZoneRef}
+                style={{ width: `${timelineZoomScale * 100}%`, right: "auto" }}
                 onPointerDown={(event) => beginScrub(event.clientX)}
                 aria-label="Seek timeline"
               />
@@ -2327,8 +2445,8 @@ export function EditEditor({ slug }: EditEditorProps) {
                     <div
                       className={`${styles.clip} ${styles.sceneClip}`}
                       style={{
-                        left: `${track.start}%`,
-                        width: `${track.width}%`,
+                        left: `${track.start * timelineZoomScale}%`,
+                        width: `${track.width * timelineZoomScale}%`,
                       }}
                       onPointerDown={(event) =>
                         beginTimelineClipDrag(event, {
@@ -2379,12 +2497,12 @@ export function EditEditor({ slug }: EditEditorProps) {
                 return (
                   <div className={styles.trackRow} key={`element-${trackKey}`}>
                     <div className={styles.trackLane}>
-                      <div
-                        className={`${styles.clip} ${styles.elementClip} ${isSelected ? styles.elementClipSelected : ""}`}
-                        style={{
-                          left: `${track.start}%`,
-                          width: `${track.width}%`,
-                        }}
+                    <div
+                      className={`${styles.clip} ${styles.elementClip} ${isSelected ? styles.elementClipSelected : ""}`}
+                      style={{
+                          left: `${track.start * timelineZoomScale}%`,
+                          width: `${track.width * timelineZoomScale}%`,
+                      }}
                         onClick={() => {
                           setSelectedElementKey(trackKey);
                           seekToFrame(track.startFrame);
@@ -2439,19 +2557,19 @@ export function EditEditor({ slug }: EditEditorProps) {
                   </button>
                 </div>
               </div>
-              <div className={styles.playheadLayer}>
-                <button
-                  type="button"
-                  className={styles.playhead}
-                  onPointerDown={(event) => beginScrub(event.clientX)}
-                  aria-label="Drag playhead"
-                  style={
-                    {
-                      "--playhead-progress": `${progress * 100}%`,
-                    } as CSSProperties
-                  }
-                />
-              </div>
+            </div>
+            <div className={styles.playheadLayer}>
+              <button
+                type="button"
+                className={styles.playhead}
+                onPointerDown={(event) => beginScrub(event.clientX)}
+                aria-label="Drag playhead"
+                style={
+                  {
+                    "--playhead-left": `${playheadLeftPx}px`,
+                  } as CSSProperties
+                }
+              />
             </div>
           </div>
         </div>
