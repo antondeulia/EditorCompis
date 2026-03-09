@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import styles from "../page.module.css";
+import styles from "../../styles/editor.module.css";
 
 type EditorTopBarProps = {
   slug: string;
@@ -67,3 +67,5 @@ export function EditorTopBar({
     </header>
   );
 }
+
+

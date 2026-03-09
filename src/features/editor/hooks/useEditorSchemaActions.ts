@@ -1,10 +1,10 @@
 "use client";
 
 import { Dispatch, SetStateAction, useCallback } from "react";
-import { editableOverlayKinds } from "./editor-constants";
-import { SelectedTimelineTrack } from "./editor-types";
-import { clamp, getElementTimelineStart, getTextMinimumHeightForWidth, getTextMinimumWidth } from "./editor-utils";
-import { VideoElement, VideoSchema } from "./video-schema";
+import { editableOverlayKinds } from "../model/constants";
+import { SelectedTimelineTrack } from "../model/types";
+import { clamp, getElementTimelineStart, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
+import { VideoElement, VideoSchema } from "../model/schema";
 
 type SelectedOverlayElement =
   | {
@@ -390,3 +390,6 @@ export function useEditorSchemaActions({
     updateSelectedTextElement,
   };
 }
+
+
+

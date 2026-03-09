@@ -1,0 +1,229 @@
+"use client";
+
+import { useCallback, useMemo } from "react";
+import { editableOverlayKinds } from "../model/constants";
+import { VideoElement, VideoSchema } from "../model/schema";
+import { ActiveOverlayElement, OverlayTrack, TrackVisualKind } from "../model/types";
+import {
+  getElementLabel,
+  getElementTimelineStart,
+  getRenderedElementPosition,
+  getScenePrimaryElement,
+} from "../lib/utils";
+import styles from "../styles/editor.module.css";
+
+type SelectedOverlayElement =
+  | {
+      sceneId: string;
+      elementIndex: number;
+      element: VideoElement;
+    }
+  | null;
+
+type SceneTrack = {
+  id: string;
+  name: string;
+  startFrame: number;
+  durationInFrames: number;
+  start: number;
+  width: number;
+  meta: string;
+  visualKind: TrackVisualKind;
+  previewSrc?: string;
+};
+
+type InspectorRow = {
+  id: string;
+  label: string;
+  meta: string;
+};
+
+type Params = {
+  videoSchema: VideoSchema;
+  fps: number;
+  currentFrame: number;
+  timelineFrameSpan: number;
+  selectedElementKey: string | null;
+};
+
+export function useEditorDerivedState({
+  videoSchema,
+  fps,
+  currentFrame,
+  timelineFrameSpan,
+  selectedElementKey,
+}: Params) {
+  const getSceneClipKindClassName = useCallback((kind: TrackVisualKind) => {
+    switch (kind) {
+      case "text":
+        return styles.sceneClipText;
+      case "shape":
+        return styles.sceneClipShape;
+      case "audio":
+        return styles.sceneClipAudio;
+      default:
+        return styles.sceneClipVideo;
+    }
+  }, []);
+
+  const getElementClipKindClassName = useCallback((kind: TrackVisualKind) => {
+    switch (kind) {
+      case "text":
+        return styles.elementClipText;
+      case "shape":
+        return styles.elementClipShape;
+      case "audio":
+        return styles.elementClipAudio;
+      default:
+        return styles.elementClipVideo;
+    }
+  }, []);
+
+  const sceneTracks = useMemo<SceneTrack[]>(() => {
+    return videoSchema.scenes.map((scene) => {
+      const primaryElement = getScenePrimaryElement(scene);
+      const visualKind: TrackVisualKind =
+        primaryElement?.kind === "video" || primaryElement?.kind === "image"
+          ? primaryElement.kind
+          : primaryElement?.kind === "text"
+            ? "text"
+            : "shape";
+      const previewSrc =
+        primaryElement?.kind === "video" || primaryElement?.kind === "image" ? primaryElement.src : undefined;
+
+      return {
+        id: scene.id,
+        name: scene.name,
+        startFrame: scene.startFrame,
+        durationInFrames: scene.durationInFrames,
+        start: (scene.startFrame / timelineFrameSpan) * 100,
+        width: (scene.durationInFrames / timelineFrameSpan) * 100,
+        meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
+        visualKind,
+        previewSrc,
+      };
+    });
+  }, [fps, timelineFrameSpan, videoSchema.scenes]);
+
+  const overlayTracks = useMemo<OverlayTrack[]>(() => {
+    const tracks: OverlayTrack[] = [];
+
+    for (const scene of videoSchema.scenes) {
+      scene.elements.forEach((element, elementIndex) => {
+        if (!editableOverlayKinds.has(element.kind)) {
+          return;
+        }
+
+        const globalStartFrame = getElementTimelineStart(scene.startFrame, element);
+        const globalDuration = Math.max(1, element.durationInFrames);
+        tracks.push({
+          sceneId: scene.id,
+          sceneName: scene.name,
+          elementId: element.id,
+          elementIndex,
+          elementKind: element.kind,
+          elementName: getElementLabel(element),
+          startFrame: globalStartFrame,
+          durationInFrames: globalDuration,
+          start: (globalStartFrame / timelineFrameSpan) * 100,
+          width: (globalDuration / timelineFrameSpan) * 100,
+          meta: `${(globalDuration / fps).toFixed(1)}s`,
+          visualKind:
+            element.kind === "video" || element.kind === "image"
+              ? element.kind
+              : element.kind === "text"
+                ? "text"
+                : "shape",
+          previewSrc: element.kind === "video" || element.kind === "image" ? element.src : undefined,
+        });
+      });
+    }
+
+    return tracks;
+  }, [fps, timelineFrameSpan, videoSchema.scenes]);
+
+  const activeOverlayElements = useMemo<ActiveOverlayElement[]>(() => {
+    const overlays: ActiveOverlayElement[] = [];
+
+    for (const scene of videoSchema.scenes) {
+      scene.elements.forEach((element, elementIndex) => {
+        if (!editableOverlayKinds.has(element.kind)) {
+          return;
+        }
+
+        const timelineStartFrame = getElementTimelineStart(scene.startFrame, element);
+        if (currentFrame < timelineStartFrame || currentFrame >= timelineStartFrame + element.durationInFrames) {
+          return;
+        }
+        const localFrame = currentFrame - timelineStartFrame;
+        const renderedPosition = getRenderedElementPosition(element, localFrame);
+
+        overlays.push({
+          sceneId: scene.id,
+          sceneName: scene.name,
+          elementIndex,
+          renderedX: renderedPosition.x,
+          renderedY: renderedPosition.y,
+          element,
+        });
+      });
+    }
+
+    return overlays;
+  }, [currentFrame, videoSchema.scenes]);
+
+  const selectedOverlayElement = useMemo<SelectedOverlayElement>(() => {
+    if (!selectedElementKey) {
+      return null;
+    }
+
+    const [sceneId, elementIndexToken] = selectedElementKey.split(":");
+    const elementIndex = Number(elementIndexToken);
+    if (!Number.isInteger(elementIndex)) {
+      return null;
+    }
+
+    const scene = videoSchema.scenes.find((item) => item.id === sceneId);
+    if (!scene) {
+      return null;
+    }
+
+    const element = scene.elements[elementIndex];
+    if (!element || !editableOverlayKinds.has(element.kind)) {
+      return null;
+    }
+
+    return {
+      sceneId,
+      elementIndex,
+      element,
+    };
+  }, [selectedElementKey, videoSchema.scenes]);
+
+  const inspectorRows = useMemo<InspectorRow[]>(
+    () => [
+      ...videoSchema.scenes.map((scene) => ({
+        id: scene.id,
+        label: "<Scene>",
+        meta: `${scene.name} - ${(scene.durationInFrames / fps).toFixed(1)}s`,
+      })),
+      ...overlayTracks.map((track) => ({
+        id: `${track.sceneId}:${track.elementIndex}`,
+        label: `<${track.elementKind}>`,
+        meta: `${track.sceneName} / ${track.elementName}`,
+      })),
+    ],
+    [fps, overlayTracks, videoSchema.scenes],
+  );
+
+  return {
+    sceneTracks,
+    overlayTracks,
+    activeOverlayElements,
+    selectedOverlayElement,
+    inspectorRows,
+    getSceneClipKindClassName,
+    getElementClipKindClassName,
+  };
+}
+

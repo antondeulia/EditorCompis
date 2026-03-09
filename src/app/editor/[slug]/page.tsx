@@ -1,12 +1,12 @@
-import { EditEditor } from "./EditEditor";
+import { Editor } from "@/features/editor/EditorPage";
 
-type EditPageProps = {
+type EditorPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export default async function EditPage({ params }: EditPageProps) {
+export default async function EditorPage({ params }: EditorPageProps) {
   await new Promise((resolve) => setTimeout(resolve, 700));
   const { slug } = await params;
 
-  return <EditEditor slug={slug} />;
+  return <Editor slug={slug} />;
 }

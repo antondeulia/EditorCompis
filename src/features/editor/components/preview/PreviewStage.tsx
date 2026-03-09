@@ -2,11 +2,11 @@
 
 import { PointerEvent, RefObject } from "react";
 import { Player, PlayerRef } from "@remotion/player";
-import { ActiveOverlayElement, CompositionViewport } from "../editor-types";
-import { VideoElement, VideoSchema } from "../video-schema";
-import { VideoComposition } from "../remotion/VideoComposition";
-import { overlayResizeHandles } from "../editor-constants";
-import styles from "../page.module.css";
+import { ActiveOverlayElement, CompositionViewport } from "../../model/types";
+import { VideoElement, VideoSchema } from "../../model/schema";
+import { VideoComposition } from "../../remotion/VideoComposition";
+import { overlayResizeHandles } from "../../model/constants";
+import styles from "../../styles/editor.module.css";
 
 type PreviewStageProps = {
   playerRef: RefObject<PlayerRef | null>;
@@ -144,3 +144,5 @@ export function PreviewStage({
     </section>
   );
 }
+
+

@@ -1,5 +1,5 @@
-import { VideoElement } from "./video-schema";
-import { ElementsLibrarySection } from "./editor-types";
+import { VideoElement } from "./schema";
+import { ElementsLibrarySection } from "./types";
 
 export const transportSeekStep = 5;
 export const keyboardSeekStep = 1;
@@ -89,3 +89,7 @@ export const elementsLibrarySections: ElementsLibrarySection[] = [
     ],
   },
 ];
+
+
+
+

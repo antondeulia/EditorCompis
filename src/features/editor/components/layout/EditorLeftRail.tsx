@@ -1,8 +1,8 @@
 "use client";
 
 import { ChangeEvent, PointerEvent, RefObject } from "react";
-import { AssetItem } from "../editor-types";
-import styles from "../page.module.css";
+import { AssetItem } from "../../model/types";
+import styles from "../../styles/editor.module.css";
 
 type EditorLeftRailProps = {
   isCollapsed: boolean;
@@ -132,3 +132,5 @@ export function EditorLeftRail({
     </aside>
   );
 }
+
+

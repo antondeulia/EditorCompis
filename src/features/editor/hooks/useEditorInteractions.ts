@@ -1,10 +1,10 @@
 "use client";
 
 import { Dispatch, PointerEvent, RefObject, SetStateAction, useCallback, useEffect, useState } from "react";
-import { editableOverlayKinds } from "./editor-constants";
-import { DragState, OverlayResizeState, SelectedTimelineTrack, TimelineDragState } from "./editor-types";
-import { getTextMinimumHeightForWidth, getTextMinimumWidth } from "./editor-utils";
-import { VideoElement, VideoSchema } from "./video-schema";
+import { editableOverlayKinds } from "../model/constants";
+import { DragState, OverlayResizeState, SelectedTimelineTrack, TimelineDragState } from "../model/types";
+import { getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
+import { VideoElement, VideoSchema } from "../model/schema";
 
 type Params = {
   scrubZoneRef: RefObject<HTMLButtonElement | null>;
@@ -442,3 +442,6 @@ export function useEditorInteractions({
     clearOverlayInteractionState,
   };
 }
+
+
+

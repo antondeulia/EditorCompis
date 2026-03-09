@@ -1,4 +1,4 @@
-import { VideoSchema } from "./video-schema";
+import { VideoSchema } from "../model/schema";
 
 export type EditorProjectSnapshot = {
   slug: string;
@@ -39,3 +39,7 @@ export const localProjectGateway: EditorProjectGateway = {
     }
   },
 };
+
+
+
+

@@ -1,6 +1,6 @@
-import { ElementAnimation, VideoElement, VideoSchema } from "./video-schema";
-import { AssetItem } from "./editor-types";
-import { editableOverlayKinds } from "./editor-constants";
+import { ElementAnimation, VideoElement, VideoSchema } from "../model/schema";
+import { AssetItem } from "../model/types";
+import { editableOverlayKinds } from "../model/constants";
 
 let textMeasureContext: CanvasRenderingContext2D | null = null;
 
@@ -249,3 +249,6 @@ export function isTypingTarget(target: EventTarget | null) {
   const tagName = target.tagName;
   return target.isContentEditable || tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
 }
+
+
+

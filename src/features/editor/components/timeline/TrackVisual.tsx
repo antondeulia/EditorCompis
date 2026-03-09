@@ -1,7 +1,7 @@
 "use client";
 
-import { TrackVisualKind } from "../editor-types";
-import styles from "../page.module.css";
+import { TrackVisualKind } from "../../model/types";
+import styles from "../../styles/editor.module.css";
 
 type TrackVisualProps = {
   kind: TrackVisualKind;
@@ -89,3 +89,5 @@ export function TrackVisual({ kind, title, src, waveformSeed, durationInFrames, 
 
   return <div className={styles.textTrackFill} aria-hidden="true" />;
 }
+
+

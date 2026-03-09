@@ -1,10 +1,10 @@
 "use client";
 
 import { ChangeEvent } from "react";
-import { elementsLibrarySections, rightSidebarSections, RightSidebarSection } from "../editor-constants";
-import { ElementsLibraryIcon } from "../editor-types";
-import { VideoElement } from "../video-schema";
-import styles from "../page.module.css";
+import { elementsLibrarySections, rightSidebarSections, RightSidebarSection } from "../../model/constants";
+import { ElementsLibraryIcon } from "../../model/types";
+import { VideoElement } from "../../model/schema";
+import styles from "../../styles/editor.module.css";
 
 type EditorRightSidebarProps = {
   activeSection: RightSidebarSection;
@@ -368,3 +368,5 @@ export function EditorRightSidebar({
     </aside>
   );
 }
+
+

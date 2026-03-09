@@ -2,7 +2,7 @@
 
 import { CSSProperties } from "react";
 import { AbsoluteFill, Easing, Img, Sequence, Video, interpolate, useCurrentFrame } from "remotion";
-import { ElementAnimation, VideoElement, VideoSchema } from "../video-schema";
+import { ElementAnimation, VideoElement, VideoSchema } from "../model/schema";
 
 type VideoCompositionProps = {
   schema: VideoSchema;
@@ -190,3 +190,4 @@ export function VideoComposition({ schema }: VideoCompositionProps) {
     </AbsoluteFill>
   );
 }
+

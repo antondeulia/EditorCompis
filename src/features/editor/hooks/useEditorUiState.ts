@@ -1,9 +1,9 @@
 "use client";
 
 import { ChangeEvent, PointerEvent, useCallback, useEffect, useRef, useState } from "react";
-import { defaultSidebarWidth, defaultTimelineHeight, RightSidebarSection } from "./editor-constants";
-import { AssetItem, AssetKind } from "./editor-types";
-import { clamp, formatFileSize } from "./editor-utils";
+import { defaultSidebarWidth, defaultTimelineHeight, RightSidebarSection } from "../model/constants";
+import { AssetItem, AssetKind } from "../model/types";
+import { clamp, formatFileSize } from "../lib/utils";
 
 type UseEditorUiStateParams = {
   initialAssets: AssetItem[];
@@ -250,3 +250,6 @@ export function useEditorUiState({ initialAssets }: UseEditorUiStateParams) {
     toggleInspector,
   };
 }
+
+
+

@@ -3,8 +3,8 @@
 import { CSSProperties, PointerEvent, RefObject } from "react";
 import { TimelineInspector } from "./TimelineInspector/TimelineInspector";
 import { TrackVisual } from "./TrackVisual";
-import { OverlayTrack, SelectedTimelineTrack, TrackVisualKind } from "../editor-types";
-import styles from "../page.module.css";
+import { OverlayTrack, SelectedTimelineTrack, TrackVisualKind } from "../../model/types";
+import styles from "../../styles/editor.module.css";
 
 type SceneTrack = {
   id: string;
@@ -333,3 +333,5 @@ export function EditorTimeline({
     </section>
   );
 }
+
+

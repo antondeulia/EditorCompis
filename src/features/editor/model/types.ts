@@ -1,6 +1,6 @@
-import { VideoElement } from "./video-schema";
+import { VideoElement } from "./schema";
 
-export type EditEditorProps = {
+export type EditorProps = {
   slug: string;
 };
 
@@ -136,3 +136,8 @@ export type ActiveOverlayElement = {
   renderedY: number;
   element: VideoElement;
 };
+
+
+
+
+
