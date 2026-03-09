@@ -38,6 +38,7 @@ type BaseElement = {
   id: string;
   startFrame: number;
   timelineStartFrame?: number;
+  timelineLane?: number;
   durationInFrames: number;
   x: number;
   y: number;
@@ -87,6 +88,7 @@ export type VideoScene = {
   id: string;
   name: string;
   startFrame: number;
+  timelineLane?: number;
   durationInFrames: number;
   backgroundColor?: string;
   elements: VideoElement[];

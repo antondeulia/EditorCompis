@@ -28,6 +28,7 @@ export type OverlayTrack = {
   sceneName: string;
   elementId: string;
   elementIndex: number;
+  lane: number;
   elementKind: VideoElement["kind"];
   elementName: string;
   startFrame: number;
@@ -69,16 +70,22 @@ export type TimelineDragState =
       kind: "scene";
       sceneId: string;
       startFrame: number;
+      startLane: number;
+      maxLane: number;
       pointerOffsetFrames?: number;
       startClientX: number;
+      startClientY: number;
     }
   | {
       kind: "element";
       sceneId: string;
       elementIndex: number;
       startFrame: number;
+      startLane: number;
+      maxLane: number;
       pointerOffsetFrames?: number;
       startClientX: number;
+      startClientY: number;
     };
 
 export type SelectedTimelineTrack =

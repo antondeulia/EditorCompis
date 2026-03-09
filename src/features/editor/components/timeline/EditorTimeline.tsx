@@ -9,6 +9,7 @@ import styles from "../../styles/editor.module.css";
 type SceneTrack = {
   id: string;
   name: string;
+  lane: number;
   startFrame: number;
   durationInFrames: number;
   start: number;
@@ -188,7 +189,10 @@ export function EditorTimeline({
                             kind: "scene",
                             sceneId: track.id,
                             startFrame: track.startFrame,
+                            startLane: track.lane,
+                            maxLane: Math.max(sceneTracks.length - 1, 0),
                             startClientX: event.clientX,
+                            startClientY: event.clientY,
                           })
                         }
                         onClick={() => {
@@ -259,7 +263,10 @@ export function EditorTimeline({
                             sceneId: track.sceneId,
                             elementIndex: track.elementIndex,
                             startFrame: track.startFrame,
+                            startLane: track.lane,
+                            maxLane: Math.max(overlayTracks.length - 1, 0),
                             startClientX: event.clientX,
+                            startClientY: event.clientY,
                           })
                         }
                       >

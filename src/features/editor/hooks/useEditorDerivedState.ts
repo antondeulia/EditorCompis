@@ -24,6 +24,7 @@ type SelectedOverlayElement =
 type SceneTrack = {
   id: string;
   name: string;
+  lane: number;
   startFrame: number;
   durationInFrames: number;
   start: number;
@@ -81,7 +82,7 @@ export function useEditorDerivedState({
   }, []);
 
   const sceneTracks = useMemo<SceneTrack[]>(() => {
-    return videoSchema.scenes.map((scene) => {
+    const tracks = videoSchema.scenes.map((scene, sceneIndex) => {
       const primaryElement = getScenePrimaryElement(scene);
       const visualKind: TrackVisualKind =
         primaryElement?.kind === "video" || primaryElement?.kind === "image"
@@ -95,6 +96,7 @@ export function useEditorDerivedState({
       return {
         id: scene.id,
         name: scene.name,
+        lane: scene.timelineLane ?? sceneIndex,
         startFrame: scene.startFrame,
         durationInFrames: scene.durationInFrames,
         start: (scene.startFrame / timelineFrameSpan) * 100,
@@ -104,10 +106,14 @@ export function useEditorDerivedState({
         previewSrc,
       };
     });
+
+    tracks.sort((a, b) => a.lane - b.lane || a.startFrame - b.startFrame || a.id.localeCompare(b.id));
+    return tracks;
   }, [fps, timelineFrameSpan, videoSchema.scenes]);
 
   const overlayTracks = useMemo<OverlayTrack[]>(() => {
     const tracks: OverlayTrack[] = [];
+    let fallbackLane = 0;
 
     for (const scene of videoSchema.scenes) {
       scene.elements.forEach((element, elementIndex) => {
@@ -133,6 +139,7 @@ export function useEditorDerivedState({
           sceneName: scene.name,
           elementId: element.id,
           elementIndex,
+          lane: element.timelineLane ?? fallbackLane,
           elementKind: element.kind,
           elementName: getElementLabel(element),
           startFrame: globalStartFrame,
@@ -148,9 +155,17 @@ export function useEditorDerivedState({
                 : "shape",
           previewSrc: element.kind === "video" || element.kind === "image" ? element.src : undefined,
         });
+        fallbackLane += 1;
       });
     }
 
+    tracks.sort(
+      (a, b) =>
+        a.lane - b.lane
+        || a.startFrame - b.startFrame
+        || a.sceneId.localeCompare(b.sceneId)
+        || a.elementIndex - b.elementIndex,
+    );
     return tracks;
   }, [fps, timelineFrameSpan, videoSchema.durationInFrames, videoSchema.scenes]);
 

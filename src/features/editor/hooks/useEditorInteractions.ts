@@ -161,12 +161,15 @@ export function useEditorInteractions({
     }
 
     const drag = timelineDragState;
+    const trackRowHeight = 36;
     let hasMoved = false;
     let lastAppliedStartFrame = Number.NaN;
+    let lastAppliedLane = Number.NaN;
     let rafId: number | null = null;
     let pendingClientX: number | null = null;
+    let pendingClientY: number | null = null;
 
-    function applyDrag(clientX: number) {
+    function applyDrag(clientX: number, clientY: number) {
       const scrub = scrubZoneRef.current;
       if (!scrub) {
         return;
@@ -178,32 +181,48 @@ export function useEditorInteractions({
       const pointerFrame = (pointerX / scrubWidth) * timelineFrameSpan;
       const pointerOffsetFrames = drag.pointerOffsetFrames ?? 0;
       const nextStartFrame = Math.max(0, Math.round(pointerFrame - pointerOffsetFrames));
+      const laneDelta = Math.round((clientY - drag.startClientY) / trackRowHeight);
+      const nextLane = Math.max(0, Math.min(drag.maxLane, drag.startLane + laneDelta));
 
-      if (nextStartFrame === lastAppliedStartFrame) {
+      if (nextStartFrame === lastAppliedStartFrame && nextLane === lastAppliedLane) {
         return;
       }
       lastAppliedStartFrame = nextStartFrame;
+      lastAppliedLane = nextLane;
 
-      if (nextStartFrame !== drag.startFrame) {
+      if (nextStartFrame !== drag.startFrame || nextLane !== drag.startLane) {
         hasMoved = true;
       }
 
       if (drag.kind === "scene") {
         setVideoSchema((prev) => {
-          let hasChange = false;
-          const nextScenes = prev.scenes.map((scene) => {
-            if (scene.id !== drag.sceneId) {
-              return scene;
-            }
+          const orderedScenes = prev.scenes
+            .map((scene, index) => ({
+              id: scene.id,
+              lane: scene.timelineLane ?? index,
+            }))
+            .sort((a, b) => a.lane - b.lane || a.id.localeCompare(b.id));
+          const fromIndex = orderedScenes.findIndex((scene) => scene.id === drag.sceneId);
+          if (fromIndex >= 0 && fromIndex !== nextLane) {
+            const [moved] = orderedScenes.splice(fromIndex, 1);
+            orderedScenes.splice(nextLane, 0, moved);
+          }
+          const laneBySceneId = new Map(orderedScenes.map((scene, index) => [scene.id, index] as const));
 
-            if (scene.startFrame === nextStartFrame) {
+          let hasChange = false;
+          const nextScenes = prev.scenes.map((scene, index) => {
+            const nextSceneLane = laneBySceneId.get(scene.id) ?? (scene.timelineLane ?? index);
+            const shouldMoveFrame = scene.id === drag.sceneId && scene.startFrame !== nextStartFrame;
+            const shouldMoveLane = (scene.timelineLane ?? index) !== nextSceneLane;
+            if (!shouldMoveFrame && !shouldMoveLane) {
               return scene;
             }
 
             hasChange = true;
             return {
               ...scene,
-              startFrame: nextStartFrame,
+              startFrame: shouldMoveFrame ? nextStartFrame : scene.startFrame,
+              timelineLane: nextSceneLane,
             };
           });
 
@@ -221,27 +240,60 @@ export function useEditorInteractions({
       }
 
       setVideoSchema((prev) => {
+        let fallbackLane = 0;
+        const orderedOverlays = prev.scenes.flatMap((scene) =>
+          scene.elements
+            .map((element, index) => ({ sceneId: scene.id, elementIndex: index, element }))
+            .filter((entry) => editableOverlayKinds.has(entry.element.kind))
+            .map((entry) => {
+              const lane = entry.element.timelineLane ?? fallbackLane;
+              fallbackLane += 1;
+              return {
+                sceneId: entry.sceneId,
+                elementIndex: entry.elementIndex,
+                lane,
+              };
+            }),
+        );
+        orderedOverlays.sort(
+          (a, b) =>
+            a.lane - b.lane
+            || a.sceneId.localeCompare(b.sceneId)
+            || a.elementIndex - b.elementIndex,
+        );
+        const fromIndex = orderedOverlays.findIndex(
+          (entry) => entry.sceneId === drag.sceneId && entry.elementIndex === drag.elementIndex,
+        );
+        if (fromIndex >= 0 && fromIndex !== nextLane) {
+          const [moved] = orderedOverlays.splice(fromIndex, 1);
+          orderedOverlays.splice(nextLane, 0, moved);
+        }
+        const laneByElementKey = new Map(
+          orderedOverlays.map((entry, index) => [`${entry.sceneId}:${entry.elementIndex}`, index] as const),
+        );
+
         let hasSceneChange = false;
         const nextScenes = prev.scenes.map((scene) => {
-          if (scene.id !== drag.sceneId) {
-            return scene;
-          }
-
           let hasElementChange = false;
           const nextElements = scene.elements.map((element, index) => {
-            if (index !== drag.elementIndex) {
+            if (!editableOverlayKinds.has(element.kind)) {
               return element;
             }
 
-            if (element.timelineStartFrame === nextStartFrame) {
+            const elementKey = `${scene.id}:${index}`;
+            const nextElementLane = laneByElementKey.get(elementKey) ?? element.timelineLane ?? 0;
+            const shouldMoveFrame = scene.id === drag.sceneId && index === drag.elementIndex && element.timelineStartFrame !== nextStartFrame;
+            const shouldMoveLane = element.timelineLane !== nextElementLane;
+
+            if (!shouldMoveFrame && !shouldMoveLane) {
               return element;
             }
 
             hasElementChange = true;
-
             return {
               ...element,
-              timelineStartFrame: nextStartFrame,
+              timelineStartFrame: shouldMoveFrame ? nextStartFrame : element.timelineStartFrame,
+              timelineLane: nextElementLane,
             };
           });
 
@@ -269,17 +321,20 @@ export function useEditorInteractions({
 
     function flushPendingDrag() {
       rafId = null;
-      if (pendingClientX === null) {
+      if (pendingClientX === null || pendingClientY === null) {
         return;
       }
 
       const clientX = pendingClientX;
+      const clientY = pendingClientY;
       pendingClientX = null;
-      applyDrag(clientX);
+      pendingClientY = null;
+      applyDrag(clientX, clientY);
     }
 
     function handlePointerMove(event: globalThis.PointerEvent) {
       pendingClientX = event.clientX;
+      pendingClientY = event.clientY;
       if (rafId !== null) {
         return;
       }
@@ -294,8 +349,9 @@ export function useEditorInteractions({
       }
 
       if (pendingClientX !== null) {
-        applyDrag(pendingClientX);
+        applyDrag(pendingClientX, pendingClientY ?? drag.startClientY);
         pendingClientX = null;
+        pendingClientY = null;
       }
 
       if (hasMoved) {
