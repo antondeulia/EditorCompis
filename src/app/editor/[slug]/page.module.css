@@ -8,6 +8,17 @@
   --color-accent-gold: #f0c24b;
   --color-accent-rgb: 121, 51, 255;
   --color-accent-soft: rgba(121, 51, 255, 0.2);
+  --playhead: #f43f5e;
+  --clip-video: #2563eb;
+  --clip-video-hover: #3b82f6;
+  --clip-text: #f59e0b;
+  --clip-text-hover: #fbbf24;
+  --clip-shape: #8b5cf6;
+  --clip-shape-hover: #a78bfa;
+  --clip-audio: #10b981;
+  --clip-audio-hover: #34d399;
+  --clip-effect: #ef4444;
+  --clip-effect-hover: #f87171;
   height: 100vh;
   background: #f3f6fb;
   color: #243041;
@@ -1179,6 +1190,7 @@
   display: grid;
   grid-template-rows: var(--timeline-header-height) 1fr;
   position: relative;
+  overflow: hidden;
 }
 
 .timelineActions {
@@ -1222,8 +1234,8 @@
 .timelineHeader::before {
   content: "";
   position: absolute;
-  left: var(--timeline-side-padding);
-  right: calc(var(--timeline-side-padding) + var(--timeline-right-gap));
+  left: 0;
+  right: 0;
   top: 0;
   height: 10px;
   background-image:
@@ -1249,7 +1261,7 @@
 
 .timelineHeader span {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .tracks {
@@ -1357,9 +1369,8 @@
   padding: 0;
   border-radius: 0;
   overflow: hidden;
-  border: 1px solid rgba(31, 42, 60, 0.18);
-  background: #1b2535;
-  box-shadow: 0 2px 10px rgba(10, 15, 26, 0.2);
+  border: 1px solid rgba(15, 23, 42, 0.28);
+  background: var(--clip-video);
   cursor: pointer;
   pointer-events: auto;
   z-index: 3;
@@ -1389,28 +1400,62 @@
 }
 
 .sceneClip {
-  border-color: rgba(37, 62, 104, 0.55);
-  background: linear-gradient(180deg, #223b63 0%, #162743 100%);
+  border-color: rgba(15, 23, 42, 0.24);
 }
 
 .elementClip {
-  border-color: rgba(125, 93, 16, 0.5);
-  background: linear-gradient(180deg, #d9c58f 0%, #bca568 100%);
+  border-color: rgba(15, 23, 42, 0.24);
   top: 3px;
   bottom: 3px;
   border-radius: 6px;
 }
 
+.sceneClipVideo,
+.elementClipVideo {
+  background: var(--clip-video);
+}
+
+.sceneClipVideo:hover,
+.elementClipVideo:hover {
+  background: var(--clip-video-hover);
+}
+
+.sceneClipText,
+.elementClipText {
+  background: var(--clip-text);
+}
+
+.sceneClipText:hover,
+.elementClipText:hover {
+  background: var(--clip-text-hover);
+}
+
+.sceneClipShape,
+.elementClipShape {
+  background: var(--clip-shape);
+}
+
+.sceneClipShape:hover,
+.elementClipShape:hover {
+  background: var(--clip-shape-hover);
+}
+
+.sceneClipAudio,
+.elementClipAudio {
+  background: var(--clip-audio);
+}
+
+.sceneClipAudio:hover,
+.elementClipAudio:hover {
+  background: var(--clip-audio-hover);
+}
+
 .sceneClipSelected {
-  box-shadow:
-    0 0 0 1px rgba(116, 201, 255, 0.75) inset,
-    0 0 0 1px rgba(116, 201, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75) inset;
 }
 
 .elementClipSelected {
-  box-shadow:
-    0 0 0 1px rgba(53, 132, 192, 0.78) inset,
-    0 0 0 1px rgba(53, 132, 192, 0.52);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75) inset;
 }
 
 .clipFrames {
@@ -1453,15 +1498,7 @@
   width: 100%;
   height: 100%;
   display: block;
-  background:
-    linear-gradient(90deg, rgba(12, 18, 31, 0.44), rgba(12, 18, 31, 0.2)),
-    repeating-linear-gradient(
-      45deg,
-      rgba(98, 119, 153, 0.36) 0,
-      rgba(98, 119, 153, 0.36) 10px,
-      rgba(69, 88, 119, 0.3) 10px,
-      rgba(69, 88, 119, 0.3) 20px
-    );
+  background: rgba(15, 23, 42, 0.18);
 }
 
 .audioWave {
@@ -1473,7 +1510,7 @@
   align-items: center;
   gap: 2px;
   padding: 8px 6px;
-  background: linear-gradient(180deg, #193245 0%, #101f2d 100%);
+  background: rgba(15, 23, 42, 0.16);
 }
 
 .audioWaveBar {
@@ -1481,7 +1518,7 @@
   width: 100%;
   align-self: center;
   border-radius: 999px;
-  background: linear-gradient(180deg, #9fdcff 0%, #42b4ff 100%);
+  background: rgba(15, 23, 42, 0.3);
   opacity: 0.9;
 }
 
@@ -1489,8 +1526,8 @@
   width: 100%;
   height: 100%;
   padding: 7px 10px;
-  color: #2d2310;
-  background: linear-gradient(180deg, #e7d8a8 0%, #d5c08a 100%);
+  color: #ffffff;
+  background: transparent;
   font-size: 11px;
   font-weight: 700;
   line-height: 1.15;
@@ -1508,18 +1545,22 @@
 .clipTitle {
   position: absolute;
   left: 8px;
+  right: 28px;
   bottom: 7px;
-  color: #0f1f36;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 600;
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.18);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: none;
   z-index: 2;
   pointer-events: none;
 }
 
-.sceneClip .clipTitle {
-  color: #e5efff;
-  text-shadow: 0 1px 2px rgba(4, 10, 18, 0.5);
+.clipHasSplitAction .clipTitle {
+  right: 68px;
 }
 
 .clipSplitButton {
@@ -1554,7 +1595,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #ff4b1f;
+  background: var(--playhead);
   border: 0;
   padding: 0;
   transform: translateX(0);
@@ -1571,7 +1612,7 @@
   width: 18px;
   height: 14px;
   transform: translate(-50%, 0);
-  background: #ff4b1f;
+  background: var(--playhead);
   border-radius: 2px 2px 6px 6px;
   clip-path: polygon(14% 0, 86% 0, 86% 55%, 50% 100%, 14% 55%);
 }

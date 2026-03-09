@@ -89,6 +89,7 @@ type TimelineDragState =
       kind: "scene";
       sceneId: string;
       startFrame: number;
+      pointerOffsetFrames?: number;
       startClientX: number;
     }
   | {
@@ -96,6 +97,7 @@ type TimelineDragState =
       sceneId: string;
       elementIndex: number;
       startFrame: number;
+      pointerOffsetFrames?: number;
       startClientX: number;
     };
 
@@ -117,6 +119,8 @@ const maxTimelineZoom = 100;
 const timelineScaleBase = 0.5;
 const timelineScaleSpan = 2.5;
 const wheelZoomStep = 0.0018;
+const timelineExtensionChunkSeconds = 30;
+const timelineExtensionThresholdRatio = 0.4;
 const rightSidebarSections = ["Project", "AI Tools", "Properties", "Elements", "Captions", "Media"] as const;
 type RightSidebarSection = (typeof rightSidebarSections)[number];
 type ElementsLibraryIcon =
@@ -749,8 +753,10 @@ export function EditEditor({ slug }: EditEditorProps) {
   const [timelineDragState, setTimelineDragState] = useState<TimelineDragState | null>(null);
   const [timelineHeight, setTimelineHeight] = useState(defaultTimelineHeight);
   const [timelineZoom, setTimelineZoom] = useState(38);
+  const [timelineExtraFrames, setTimelineExtraFrames] = useState(0);
   const [isTimelineResizing, setIsTimelineResizing] = useState(false);
   const [timelinePlayheadMetrics, setTimelinePlayheadMetrics] = useState({ offsetLeft: 0, width: 1 });
+  const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [compositionViewport, setCompositionViewport] = useState<CompositionViewport>({
     left: 0,
     top: 0,
@@ -777,16 +783,55 @@ export function EditEditor({ slug }: EditEditorProps) {
   const durationInFrames = videoSchema.durationInFrames;
   const fps = videoSchema.fps;
   const durationSeconds = durationInFrames / fps;
+  const baseTimelineFrameSpan = useMemo(() => {
+    // Ruler base length should be stable and not depend on dragged clip positions.
+    return durationInFrames;
+  }, [durationInFrames]);
+  const timelineFrameSpan = baseTimelineFrameSpan + timelineExtraFrames;
+  const timelineDurationSeconds = timelineFrameSpan / fps;
   const currentTime = currentFrame / fps;
-  const progress = durationInFrames > 0 ? Math.min(currentFrame / durationInFrames, 1) : 0;
+  const maxTimelineFrame = Math.max(durationInFrames - 1, 0);
+  const progress = maxTimelineFrame > 0 ? clamp(currentFrame / maxTimelineFrame, 0, 1) : 0;
   const boundedInspectorWidth = Math.max(inspectorWidth, 250);
   const timelineZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
-  const playheadLeftPx = timelinePlayheadMetrics.offsetLeft + progress * timelinePlayheadMetrics.width;
+  const timelineSpanRatio = durationInFrames > 0 ? timelineFrameSpan / durationInFrames : 1;
+  const timelineContentWidth = `${timelineZoomScale * timelineSpanRatio * 100}%`;
+  const playheadLeftPx = clamp(
+    timelinePlayheadMetrics.offsetLeft + progress * timelinePlayheadMetrics.width,
+    timelinePlayheadMetrics.offsetLeft,
+    timelinePlayheadMetrics.offsetLeft + timelinePlayheadMetrics.width,
+  );
 
   const timelineMarks = useMemo(
-    () => Array.from({ length: 6 }, (_, i) => formatTime((durationSeconds * i) / 5)),
-    [durationSeconds],
+    () => Array.from({ length: 6 }, (_, i) => formatTime((timelineDurationSeconds * i) / 5)),
+    [timelineDurationSeconds],
   );
+
+  const getSceneClipKindClassName = useCallback((kind: TrackVisualKind) => {
+    switch (kind) {
+      case "text":
+        return styles.sceneClipText;
+      case "shape":
+        return styles.sceneClipShape;
+      case "audio":
+        return styles.sceneClipAudio;
+      default:
+        return styles.sceneClipVideo;
+    }
+  }, []);
+
+  const getElementClipKindClassName = useCallback((kind: TrackVisualKind) => {
+    switch (kind) {
+      case "text":
+        return styles.elementClipText;
+      case "shape":
+        return styles.elementClipShape;
+      case "audio":
+        return styles.elementClipAudio;
+      default:
+        return styles.elementClipVideo;
+    }
+  }, []);
 
   const sceneTracks = useMemo(() => {
     return videoSchema.scenes.map((scene) => {
@@ -804,14 +849,14 @@ export function EditEditor({ slug }: EditEditorProps) {
         name: scene.name,
         startFrame: scene.startFrame,
         durationInFrames: scene.durationInFrames,
-        start: (scene.startFrame / durationInFrames) * 100,
-        width: (scene.durationInFrames / durationInFrames) * 100,
+        start: (scene.startFrame / timelineFrameSpan) * 100,
+        width: (scene.durationInFrames / timelineFrameSpan) * 100,
         meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
         visualKind,
         previewSrc,
       };
     });
-  }, [durationInFrames, fps, videoSchema.scenes]);
+  }, [fps, timelineFrameSpan, videoSchema.scenes]);
 
   const overlayTracks = useMemo(() => {
     const tracks: OverlayTrack[] = [];
@@ -823,8 +868,7 @@ export function EditEditor({ slug }: EditEditorProps) {
         }
 
         const globalStartFrame = getElementTimelineStart(scene.startFrame, element);
-        const maxDuration = durationInFrames - globalStartFrame;
-        const globalDuration = Math.max(1, Math.min(element.durationInFrames, Math.max(maxDuration, 1)));
+        const globalDuration = Math.max(1, element.durationInFrames);
         tracks.push({
           sceneId: scene.id,
           sceneName: scene.name,
@@ -834,8 +878,8 @@ export function EditEditor({ slug }: EditEditorProps) {
           elementName: getElementLabel(element),
           startFrame: globalStartFrame,
           durationInFrames: globalDuration,
-          start: (globalStartFrame / durationInFrames) * 100,
-          width: (globalDuration / durationInFrames) * 100,
+          start: (globalStartFrame / timelineFrameSpan) * 100,
+          width: (globalDuration / timelineFrameSpan) * 100,
           meta: `${(globalDuration / fps).toFixed(1)}s`,
           visualKind:
             element.kind === "video" || element.kind === "image"
@@ -849,7 +893,7 @@ export function EditEditor({ slug }: EditEditorProps) {
     }
 
     return tracks;
-  }, [durationInFrames, fps, videoSchema.scenes]);
+  }, [fps, timelineFrameSpan, videoSchema.scenes]);
 
   const activeOverlayElements = useMemo(() => {
     const overlays: Array<{
@@ -939,7 +983,7 @@ export function EditEditor({ slug }: EditEditorProps) {
         return;
       }
 
-      const boundedFrame = clamp(Math.round(nextFrame), 0, durationInFrames);
+      const boundedFrame = clamp(Math.round(nextFrame), 0, Math.max(durationInFrames - 1, 0));
       player.seekTo(boundedFrame);
       setCurrentFrame(boundedFrame);
     },
@@ -1422,6 +1466,17 @@ export function EditEditor({ slug }: EditEditorProps) {
     (event: PointerEvent<HTMLElement>, state: TimelineDragState) => {
       event.preventDefault();
       event.stopPropagation();
+      const scrubElement = scrubZoneRef.current;
+      if (!scrubElement) {
+        return;
+      }
+
+      const scrubRect = scrubElement.getBoundingClientRect();
+      const scrubWidth = Math.max(scrubRect.width, 1);
+      const pointerX = Math.max(0, event.clientX - scrubRect.left);
+      const pointerFrame = (pointerX / scrubWidth) * timelineFrameSpan;
+      const pointerOffsetFrames = pointerFrame - state.startFrame;
+
       if (state.kind === "scene") {
         setSelectedTimelineTrack({ kind: "scene", sceneId: state.sceneId });
         setSelectedElementKey(null);
@@ -1434,9 +1489,12 @@ export function EditEditor({ slug }: EditEditorProps) {
         setSelectedElementKey(`${state.sceneId}:${state.elementIndex}`);
       }
 
-      setTimelineDragState(state);
+      setTimelineDragState({
+        ...state,
+        pointerOffsetFrames,
+      });
     },
-    [],
+    [timelineFrameSpan],
   );
 
   useEffect(() => {
@@ -1446,70 +1504,142 @@ export function EditEditor({ slug }: EditEditorProps) {
 
     const drag = timelineDragState;
     let hasMoved = false;
+    let lastAppliedStartFrame = Number.NaN;
+    let rafId: number | null = null;
+    let pendingClientX: number | null = null;
 
-    function handlePointerMove(event: globalThis.PointerEvent) {
+    function applyDrag(clientX: number) {
       const scrub = scrubZoneRef.current;
       if (!scrub) {
         return;
       }
 
-      const width = Math.max(scrub.getBoundingClientRect().width, 1);
-      const deltaFrames = Math.round(((event.clientX - drag.startClientX) / width) * durationInFrames);
-      if (deltaFrames !== 0) {
+      const scrubRect = scrub.getBoundingClientRect();
+      const scrubWidth = Math.max(scrubRect.width, 1);
+      const pointerX = Math.max(0, clientX - scrubRect.left);
+      const pointerFrame = (pointerX / scrubWidth) * timelineFrameSpan;
+      const pointerOffsetFrames = drag.pointerOffsetFrames ?? 0;
+      const nextStartFrame = Math.max(0, Math.round(pointerFrame - pointerOffsetFrames));
+
+      if (nextStartFrame === lastAppliedStartFrame) {
+        return;
+      }
+      lastAppliedStartFrame = nextStartFrame;
+
+      if (nextStartFrame !== drag.startFrame) {
         hasMoved = true;
       }
 
       if (drag.kind === "scene") {
-        setVideoSchema((prev) => ({
-          ...prev,
-          scenes: prev.scenes.map((scene) => {
+        setVideoSchema((prev) => {
+          let hasChange = false;
+          const nextScenes = prev.scenes.map((scene) => {
             if (scene.id !== drag.sceneId) {
               return scene;
             }
 
-            const nextSceneStart = clamp(
-              drag.startFrame + deltaFrames,
-              0,
-              Math.max(0, prev.durationInFrames - scene.durationInFrames),
-            );
+            if (scene.startFrame === nextStartFrame) {
+              return scene;
+            }
+
+            hasChange = true;
             return {
               ...scene,
-              startFrame: nextSceneStart,
+              startFrame: nextStartFrame,
             };
-          }),
-        }));
+          });
+
+          if (!hasChange) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            scenes: nextScenes,
+          };
+        });
 
         return;
       }
 
-      setVideoSchema((prev) => ({
-        ...prev,
-        scenes: prev.scenes.map((scene) => {
+      setVideoSchema((prev) => {
+        let hasSceneChange = false;
+        const nextScenes = prev.scenes.map((scene) => {
           if (scene.id !== drag.sceneId) {
             return scene;
           }
 
+          let hasElementChange = false;
+          const nextElements = scene.elements.map((element, index) => {
+            if (index !== drag.elementIndex) {
+              return element;
+            }
+
+            if (element.timelineStartFrame === nextStartFrame) {
+              return element;
+            }
+
+            hasElementChange = true;
+
+            return {
+              ...element,
+              timelineStartFrame: nextStartFrame,
+            };
+          });
+
+          if (!hasElementChange) {
+            return scene;
+          }
+
+          hasSceneChange = true;
           return {
             ...scene,
-            elements: scene.elements.map((element, index) => {
-              if (index !== drag.elementIndex) {
-                return element;
-              }
-
-              const globalStart = drag.startFrame + deltaFrames;
-              const nextStartFrame = clamp(globalStart, 0, Math.max(0, prev.durationInFrames - 1));
-
-              return {
-                ...element,
-                timelineStartFrame: nextStartFrame,
-              };
-            }),
+            elements: nextElements,
           };
-        }),
-      }));
+        });
+
+        if (!hasSceneChange) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          scenes: nextScenes,
+        };
+      });
+    }
+
+    function flushPendingDrag() {
+      rafId = null;
+      if (pendingClientX === null) {
+        return;
+      }
+
+      const clientX = pendingClientX;
+      pendingClientX = null;
+      applyDrag(clientX);
+    }
+
+    function handlePointerMove(event: globalThis.PointerEvent) {
+      pendingClientX = event.clientX;
+      if (rafId !== null) {
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(flushPendingDrag);
     }
 
     function stopDragging() {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+
+      if (pendingClientX !== null) {
+        applyDrag(pendingClientX);
+        pendingClientX = null;
+      }
+
       if (hasMoved) {
         suppressTrackClickUntilRef.current = Date.now() + 150;
       }
@@ -1522,12 +1652,15 @@ export function EditEditor({ slug }: EditEditorProps) {
     window.addEventListener("pointercancel", stopDragging);
 
     return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
       document.body.style.userSelect = "";
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", stopDragging);
       window.removeEventListener("pointercancel", stopDragging);
     };
-  }, [durationInFrames, timelineDragState]);
+  }, [timelineDragState, timelineFrameSpan]);
 
   const startOverlayDrag = useCallback(
     (
@@ -1824,6 +1957,7 @@ export function EditEditor({ slug }: EditEditorProps) {
       const mainRect = timelineMainElement.getBoundingClientRect();
       const nextOffsetLeft = scrubRect.left - mainRect.left;
       const nextWidth = Math.max(scrubRect.width, 1);
+      const nextScrollLeft = timelineElement.scrollLeft;
 
       setTimelinePlayheadMetrics((prev) => {
         if (Math.abs(prev.offsetLeft - nextOffsetLeft) < 0.5 && Math.abs(prev.width - nextWidth) < 0.5) {
@@ -1835,6 +1969,7 @@ export function EditEditor({ slug }: EditEditorProps) {
           width: nextWidth,
         };
       });
+      setTimelineScrollLeft((prev) => (Math.abs(prev - nextScrollLeft) < 0.5 ? prev : nextScrollLeft));
     }
 
     updatePlayheadMetrics();
@@ -1882,6 +2017,35 @@ export function EditEditor({ slug }: EditEditorProps) {
     timelineElement.scrollLeft = clamp(pendingScrollLeft, 0, maxScrollLeft);
     pendingTimelineScrollLeftRef.current = null;
   }, [timelineZoom]);
+
+  useEffect(() => {
+    const timelineElement = timelineTracksRef.current;
+    if (!timelineElement) {
+      return;
+    }
+
+    const chunkFrames = Math.max(Math.round(fps * timelineExtensionChunkSeconds), fps);
+
+    function maybeExtendTimeline() {
+      const remaining = timelineElement.scrollWidth - (timelineElement.scrollLeft + timelineElement.clientWidth);
+      const threshold = Math.max(timelineElement.clientWidth * timelineExtensionThresholdRatio, 120);
+
+      if (remaining > threshold) {
+        return;
+      }
+
+      setTimelineExtraFrames((prev) => prev + chunkFrames);
+    }
+
+    maybeExtendTimeline();
+    timelineElement.addEventListener("scroll", maybeExtendTimeline, { passive: true });
+    window.addEventListener("resize", maybeExtendTimeline);
+
+    return () => {
+      timelineElement.removeEventListener("scroll", maybeExtendTimeline);
+      window.removeEventListener("resize", maybeExtendTimeline);
+    };
+  }, [fps, timelineFrameSpan]);
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
@@ -2630,7 +2794,13 @@ export function EditEditor({ slug }: EditEditorProps) {
             />
           ) : null}
           <div className={styles.timelineMain} ref={timelineMainRef}>
-            <div className={styles.timelineHeader}>
+            <div
+              className={styles.timelineHeader}
+              style={{
+                width: timelineContentWidth,
+                transform: `translateX(${-timelineScrollLeft}px)`,
+              }}
+            >
               {timelineMarks.map((mark, index) => (
                 <span key={`${mark}-${index}`}>{mark}</span>
               ))}
@@ -2639,9 +2809,9 @@ export function EditEditor({ slug }: EditEditorProps) {
               <input
                 type="range"
                 min={0}
-                max={durationSeconds || 0}
+                max={timelineDurationSeconds || 0}
                 step={0.001}
-                value={durationSeconds ? currentTime : 0}
+                value={timelineDurationSeconds ? currentTime : 0}
                 onChange={(event) => handleSeek(Number(event.target.value))}
                 className={styles.timelineScrubber}
                 aria-label="Timeline scrubber"
@@ -2650,7 +2820,7 @@ export function EditEditor({ slug }: EditEditorProps) {
                 type="button"
                 className={styles.timelineScrubZone}
                 ref={scrubZoneRef}
-                style={{ width: `${timelineZoomScale * 100}%`, right: "auto" }}
+                style={{ width: timelineContentWidth, right: "auto" }}
                 onPointerDown={(event) => beginScrub(event.clientX)}
                 aria-label="Seek timeline"
               />
@@ -2662,7 +2832,7 @@ export function EditEditor({ slug }: EditEditorProps) {
                   <div className={styles.trackRow} key={`scene-${track.id}`}>
                     <div className={styles.trackLane}>
                       <div
-                        className={`${styles.clip} ${styles.sceneClip} ${isSelected ? styles.sceneClipSelected : ""}`}
+                        className={`${styles.clip} ${styles.sceneClip} ${getSceneClipKindClassName(track.visualKind)} ${isSelected ? styles.sceneClipSelected : ""}`}
                         style={{
                           left: `${track.start * timelineZoomScale}%`,
                           width: `${track.width * timelineZoomScale}%`,
@@ -2726,7 +2896,7 @@ export function EditEditor({ slug }: EditEditorProps) {
                   <div className={styles.trackRow} key={`element-${trackKey}`}>
                     <div className={styles.trackLane}>
                     <div
-                      className={`${styles.clip} ${styles.elementClip} ${isSelected ? styles.elementClipSelected : ""}`}
+                      className={`${styles.clip} ${styles.elementClip} ${getElementClipKindClassName(track.visualKind)} ${isSelected ? styles.elementClipSelected : ""} ${isSelected ? styles.clipHasSplitAction : ""}`}
                       style={{
                           left: `${track.start * timelineZoomScale}%`,
                           width: `${track.width * timelineZoomScale}%`,
