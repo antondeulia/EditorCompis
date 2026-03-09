@@ -12,6 +12,8 @@ type SceneTrack = {
   lane: number;
   startFrame: number;
   durationInFrames: number;
+  trimStartFrames: number;
+  trimEndFrames: number;
   start: number;
   width: number;
   meta: string;
@@ -60,13 +62,57 @@ type EditorTimelineProps = {
   onBeginTimelineClipDrag: (
     event: PointerEvent<HTMLElement>,
     state:
-      | { kind: "scene"; sceneId: string; startFrame: number; startClientX: number }
-      | { kind: "element"; sceneId: string; elementIndex: number; startFrame: number; startClientX: number },
+      | {
+          kind: "scene";
+          sceneId: string;
+          startFrame: number;
+          startLane: number;
+          maxLane: number;
+          startClientX: number;
+          startClientY: number;
+        }
+      | {
+          kind: "element";
+          sceneId: string;
+          elementIndex: number;
+          startFrame: number;
+          startLane: number;
+          maxLane: number;
+          startClientX: number;
+          startClientY: number;
+        },
+  ) => void;
+  onBeginTimelineClipTrim: (
+    event: PointerEvent<HTMLElement>,
+    state:
+      | {
+          kind: "scene";
+          sceneId: string;
+          edge: "left" | "right";
+          startFrame: number;
+          durationInFrames: number;
+          trimStartFrames: number;
+          trimEndFrames: number;
+          sourceStartFrame: number;
+          sourceEndFrame: number;
+          startClientX: number;
+        }
+      | {
+          kind: "element";
+          sceneId: string;
+          elementIndex: number;
+          edge: "left" | "right";
+          startFrame: number;
+          durationInFrames: number;
+          trimStartFrames: number;
+          trimEndFrames: number;
+          sourceStartFrame: number;
+          sourceEndFrame: number;
+          startClientX: number;
+        },
   ) => void;
   onSelectSceneTrack: (sceneId: string) => void;
   onSelectElementTrack: (sceneId: string, elementIndex: number) => void;
-  onDeleteSceneTrack: (sceneId: string) => void;
-  onDeleteElementTrack: (sceneId: string, elementIndex: number) => void;
   onSplitElementTrack: (sceneId: string, elementIndex: number, frame: number) => void;
   onAddTextTrack: () => void;
   playheadLeftPx: number;
@@ -101,10 +147,9 @@ export function EditorTimeline({
   getSceneClipKindClassName,
   getElementClipKindClassName,
   onBeginTimelineClipDrag,
+  onBeginTimelineClipTrim,
   onSelectSceneTrack,
   onSelectElementTrack,
-  onDeleteSceneTrack,
-  onDeleteElementTrack,
   onSplitElementTrack,
   onAddTextTrack,
   playheadLeftPx,
@@ -173,6 +218,8 @@ export function EditorTimeline({
               />
               {sceneTracks.map((track) => {
                 const isSelected = selectedTimelineTrack?.kind === "scene" && selectedTimelineTrack.sceneId === track.id;
+                const sourceStartFrame = track.startFrame - track.trimStartFrames;
+                const sourceEndFrame = track.startFrame + track.durationInFrames + track.trimEndFrames;
 
                 return (
                   <div className={styles.trackRow} key={`scene-${track.id}`}>
@@ -203,34 +250,56 @@ export function EditorTimeline({
                           onSelectSceneTrack(track.id);
                         }}
                       >
+                        <button
+                          type="button"
+                          className={`${styles.clipTrimHandle} ${styles.clipTrimHandleLeft}`}
+                          onPointerDown={(event) =>
+                            onBeginTimelineClipTrim(event, {
+                              kind: "scene",
+                              sceneId: track.id,
+                              edge: "left",
+                              startFrame: track.startFrame,
+                              durationInFrames: track.durationInFrames,
+                              trimStartFrames: track.trimStartFrames,
+                              trimEndFrames: track.trimEndFrames,
+                              sourceStartFrame,
+                              sourceEndFrame,
+                              startClientX: event.clientX,
+                            })
+                          }
+                          aria-label={`Trim start of ${track.name}`}
+                        />
+                        <button
+                          type="button"
+                          className={`${styles.clipTrimHandle} ${styles.clipTrimHandleRight}`}
+                          onPointerDown={(event) =>
+                            onBeginTimelineClipTrim(event, {
+                              kind: "scene",
+                              sceneId: track.id,
+                              edge: "right",
+                              startFrame: track.startFrame,
+                              durationInFrames: track.durationInFrames,
+                              trimStartFrames: track.trimStartFrames,
+                              trimEndFrames: track.trimEndFrames,
+                              sourceStartFrame,
+                              sourceEndFrame,
+                              startClientX: event.clientX,
+                            })
+                          }
+                          aria-label={`Trim end of ${track.name}`}
+                        />
                         <TrackVisual
                           kind={track.visualKind}
                           title={track.name}
                           src={track.previewSrc}
                           waveformSeed={track.id}
                           durationInFrames={track.durationInFrames}
+                          trimStartFrames={track.trimStartFrames}
                           fps={fps}
                         />
                         <span className={styles.clipTitle}>
                           {track.name} ({track.meta})
                         </span>
-                        <button
-                          type="button"
-                          className={styles.clipDeleteButton}
-                          onPointerDown={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                          }}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onDeleteSceneTrack(track.id);
-                          }}
-                          aria-label={`Delete ${track.name} track`}
-                          title="Delete track"
-                        >
-                          x
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -239,6 +308,8 @@ export function EditorTimeline({
               {overlayTracks.map((track) => {
                 const trackKey = `${track.sceneId}:${track.elementIndex}`;
                 const isSelected = selectedElementKey === trackKey;
+                const sourceStartFrame = track.startFrame - track.trimStartFrames;
+                const sourceEndFrame = track.startFrame + track.durationInFrames + track.trimEndFrames;
 
                 return (
                   <div className={styles.trackRow} key={`element-${trackKey}`}>
@@ -270,34 +341,58 @@ export function EditorTimeline({
                           })
                         }
                       >
+                        <button
+                          type="button"
+                          className={`${styles.clipTrimHandle} ${styles.clipTrimHandleLeft}`}
+                          onPointerDown={(event) =>
+                            onBeginTimelineClipTrim(event, {
+                              kind: "element",
+                              sceneId: track.sceneId,
+                              elementIndex: track.elementIndex,
+                              edge: "left",
+                              startFrame: track.startFrame,
+                              durationInFrames: track.durationInFrames,
+                              trimStartFrames: track.trimStartFrames,
+                              trimEndFrames: track.trimEndFrames,
+                              sourceStartFrame,
+                              sourceEndFrame,
+                              startClientX: event.clientX,
+                            })
+                          }
+                          aria-label={`Trim start of ${track.elementKind} track`}
+                        />
+                        <button
+                          type="button"
+                          className={`${styles.clipTrimHandle} ${styles.clipTrimHandleRight}`}
+                          onPointerDown={(event) =>
+                            onBeginTimelineClipTrim(event, {
+                              kind: "element",
+                              sceneId: track.sceneId,
+                              elementIndex: track.elementIndex,
+                              edge: "right",
+                              startFrame: track.startFrame,
+                              durationInFrames: track.durationInFrames,
+                              trimStartFrames: track.trimStartFrames,
+                              trimEndFrames: track.trimEndFrames,
+                              sourceStartFrame,
+                              sourceEndFrame,
+                              startClientX: event.clientX,
+                            })
+                          }
+                          aria-label={`Trim end of ${track.elementKind} track`}
+                        />
                         <TrackVisual
                           kind={track.visualKind}
                           title={track.elementName}
                           src={track.previewSrc}
                           waveformSeed={track.elementId}
                           durationInFrames={track.durationInFrames}
+                          trimStartFrames={track.trimStartFrames}
                           fps={fps}
                         />
                         <span className={styles.clipTitle}>
                           {track.elementKind}: {track.elementName} ({track.meta})
                         </span>
-                        <button
-                          type="button"
-                          className={styles.clipDeleteButton}
-                          onPointerDown={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                          }}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onDeleteElementTrack(track.sceneId, track.elementIndex);
-                          }}
-                          aria-label={`Delete ${track.elementKind} track`}
-                          title="Delete track"
-                        >
-                          x
-                        </button>
                         {isSelected ? (
                           <button
                             type="button"

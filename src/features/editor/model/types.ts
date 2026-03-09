@@ -33,6 +33,8 @@ export type OverlayTrack = {
   elementName: string;
   startFrame: number;
   durationInFrames: number;
+  trimStartFrames: number;
+  trimEndFrames: number;
   start: number;
   width: number;
   meta: string;
@@ -86,6 +88,33 @@ export type TimelineDragState =
       pointerOffsetFrames?: number;
       startClientX: number;
       startClientY: number;
+    };
+
+export type TimelineTrimState =
+  | {
+      kind: "scene";
+      sceneId: string;
+      edge: "left" | "right";
+      startFrame: number;
+      durationInFrames: number;
+      trimStartFrames: number;
+      trimEndFrames: number;
+      sourceStartFrame: number;
+      sourceEndFrame: number;
+      startClientX: number;
+    }
+  | {
+      kind: "element";
+      sceneId: string;
+      elementIndex: number;
+      edge: "left" | "right";
+      startFrame: number;
+      durationInFrames: number;
+      trimStartFrames: number;
+      trimEndFrames: number;
+      sourceStartFrame: number;
+      sourceEndFrame: number;
+      startClientX: number;
     };
 
 export type SelectedTimelineTrack =

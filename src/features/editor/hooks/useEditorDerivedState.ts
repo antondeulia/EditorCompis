@@ -27,6 +27,8 @@ type SceneTrack = {
   lane: number;
   startFrame: number;
   durationInFrames: number;
+  trimStartFrames: number;
+  trimEndFrames: number;
   start: number;
   width: number;
   meta: string;
@@ -99,6 +101,8 @@ export function useEditorDerivedState({
         lane: scene.timelineLane ?? sceneIndex,
         startFrame: scene.startFrame,
         durationInFrames: scene.durationInFrames,
+        trimStartFrames: Math.max(0, scene.timelineTrimStartFrames ?? 0),
+        trimEndFrames: Math.max(0, scene.timelineTrimEndFrames ?? 0),
         start: (scene.startFrame / timelineFrameSpan) * 100,
         width: (scene.durationInFrames / timelineFrameSpan) * 100,
         meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
@@ -134,6 +138,8 @@ export function useEditorDerivedState({
 
         const globalStartFrame = timelineRange.startFrame;
         const globalDuration = timelineRange.durationInFrames;
+        const trimStartFrames = Math.max(0, element.timelineTrimStartFrames ?? 0);
+        const trimEndFrames = Math.max(0, element.timelineTrimEndFrames ?? 0);
         tracks.push({
           sceneId: scene.id,
           sceneName: scene.name,
@@ -144,6 +150,8 @@ export function useEditorDerivedState({
           elementName: getElementLabel(element),
           startFrame: globalStartFrame,
           durationInFrames: globalDuration,
+          trimStartFrames,
+          trimEndFrames,
           start: (globalStartFrame / timelineFrameSpan) * 100,
           width: (globalDuration / timelineFrameSpan) * 100,
           meta: `${(globalDuration / fps).toFixed(1)}s`,

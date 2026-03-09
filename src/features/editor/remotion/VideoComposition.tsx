@@ -138,42 +138,48 @@ function RenderElement({ element }: { element: VideoElement }) {
 export function VideoComposition({ schema }: VideoCompositionProps) {
   return (
     <AbsoluteFill style={{ backgroundColor: schema.backgroundColor }}>
-      {schema.scenes.map((scene) => (
-        <Sequence
-          key={scene.id}
-          from={scene.startFrame}
-          durationInFrames={getFrameRange(scene.startFrame, scene.durationInFrames).durationInFrames}
-        >
-          <AbsoluteFill style={{ backgroundColor: scene.backgroundColor ?? schema.backgroundColor }}>
-            {scene.elements.map((element) => {
-              if (editableOverlayKinds.has(element.kind)) {
-                return null;
-              }
+      {schema.scenes.map((scene) => {
+        const sceneTrimStart = Math.max(0, scene.timelineTrimStartFrames ?? 0);
 
-              const timelineRange = getElementEffectiveTimelineRange(
-                scene.startFrame,
-                scene.durationInFrames,
-                element,
-                schema.durationInFrames,
-              );
+        return (
+          <Sequence
+            key={scene.id}
+            from={scene.startFrame}
+            durationInFrames={getFrameRange(scene.startFrame, scene.durationInFrames).durationInFrames}
+          >
+            <Sequence from={-sceneTrimStart}>
+              <AbsoluteFill style={{ backgroundColor: scene.backgroundColor ?? schema.backgroundColor }}>
+                {scene.elements.map((element) => {
+                  if (editableOverlayKinds.has(element.kind)) {
+                    return null;
+                  }
 
-              if (timelineRange.durationInFrames <= 0) {
-                return null;
-              }
+                  const timelineRange = getElementEffectiveTimelineRange(
+                    scene.startFrame,
+                    scene.durationInFrames,
+                    element,
+                    schema.durationInFrames,
+                  );
 
-              return (
-                <Sequence
-                  key={element.id}
-                  from={timelineRange.startFrame - scene.startFrame}
-                  durationInFrames={timelineRange.durationInFrames}
-                >
-                  <RenderElement element={element} />
-                </Sequence>
-              );
-            })}
-          </AbsoluteFill>
-        </Sequence>
-      ))}
+                  if (timelineRange.durationInFrames <= 0) {
+                    return null;
+                  }
+
+                  return (
+                    <Sequence
+                      key={element.id}
+                      from={timelineRange.startFrame - scene.startFrame}
+                      durationInFrames={timelineRange.durationInFrames}
+                    >
+                      <RenderElement element={element} />
+                    </Sequence>
+                  );
+                })}
+              </AbsoluteFill>
+            </Sequence>
+          </Sequence>
+        );
+      })}
       {schema.scenes.flatMap((scene) =>
         scene.elements.map((element, index) => {
           if (!editableOverlayKinds.has(element.kind)) {
@@ -198,7 +204,9 @@ export function VideoComposition({ schema }: VideoCompositionProps) {
               from={timelineRange.startFrame}
               durationInFrames={timelineRange.durationInFrames}
             >
-              <RenderElement element={element} />
+              <Sequence from={-Math.max(0, element.timelineTrimStartFrames ?? 0)}>
+                <RenderElement element={element} />
+              </Sequence>
             </Sequence>
           );
         }),

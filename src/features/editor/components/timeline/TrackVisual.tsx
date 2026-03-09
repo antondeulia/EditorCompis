@@ -9,6 +9,7 @@ type TrackVisualProps = {
   src?: string;
   waveformSeed?: string;
   durationInFrames?: number;
+  trimStartFrames?: number;
   fps?: number;
 };
 
@@ -43,9 +44,10 @@ function getWaveformBars(seedInput: string, barsCount: number) {
   return nextBars;
 }
 
-export function TrackVisual({ kind, title, src, waveformSeed, durationInFrames, fps }: TrackVisualProps) {
+export function TrackVisual({ kind, title, src, waveformSeed, durationInFrames, trimStartFrames, fps }: TrackVisualProps) {
   if (kind === "video" || kind === "image") {
     const frameCount = 6;
+    const trimStartSeconds = trimStartFrames && fps ? trimStartFrames / fps : 0;
 
     return (
       <div className={styles.clipFrames}>
@@ -57,7 +59,7 @@ export function TrackVisual({ kind, title, src, waveformSeed, durationInFrames, 
                   className={styles.clipFrameVideo}
                   src={
                     durationInFrames && fps
-                      ? `${src}#t=${(((index + 0.5) / frameCount) * (durationInFrames / fps)).toFixed(2)}`
+                      ? `${src}#t=${(trimStartSeconds + ((index + 0.5) / frameCount) * (durationInFrames / fps)).toFixed(2)}`
                       : src
                   }
                   muted

@@ -88,8 +88,6 @@ export function Editor({ slug }: EditorProps) {
     updateElementPosition,
     updateElementBounds,
     addTextTrack,
-    deleteSceneTrack,
-    deleteElementTrack,
     splitElementTrack,
     splitSelectedTimelineTrack,
     deleteSelectedTimelineTrack,
@@ -265,6 +263,7 @@ export function Editor({ slug }: EditorProps) {
         getSceneClipKindClassName={derived.getSceneClipKindClassName}
         getElementClipKindClassName={derived.getElementClipKindClassName}
         onBeginTimelineClipDrag={interactions.beginTimelineClipDrag}
+        onBeginTimelineClipTrim={interactions.beginTimelineClipTrim}
         onSelectSceneTrack={(sceneId) => {
           setSelectedTimelineTrack({ kind: "scene", sceneId });
           setSelectedElementKey(null);
@@ -277,8 +276,6 @@ export function Editor({ slug }: EditorProps) {
           });
           setSelectedElementKey(`${sceneId}:${elementIndex}`);
         }}
-        onDeleteSceneTrack={deleteSceneTrack}
-        onDeleteElementTrack={deleteElementTrack}
         onSplitElementTrack={splitElementTrack}
         onAddTextTrack={addTextTrack}
         playheadLeftPx={playback.playheadLeftPx}

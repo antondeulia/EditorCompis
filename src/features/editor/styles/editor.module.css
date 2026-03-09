@@ -1384,27 +1384,30 @@
   z-index: 3;
 }
 
-.clipDeleteButton {
+.clipTrimHandle {
   position: absolute;
-  right: 6px;
-  top: 5px;
-  width: 16px;
-  height: 16px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
   border: 0;
-  border-radius: 50%;
-  background: rgba(12, 19, 34, 0.72);
-  color: #ffffff;
-  font-size: 12px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 3;
+  background: rgba(15, 23, 42, 0.2);
+  cursor: ew-resize;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
-.clipDeleteButton:hover {
-  background: rgba(227, 59, 59, 0.92);
+.clip:hover .clipTrimHandle,
+.clipTrimHandle:focus-visible {
+  opacity: 1;
+}
+
+.clipTrimHandleLeft {
+  left: 0;
+}
+
+.clipTrimHandleRight {
+  right: 0;
 }
 
 .sceneClip {
@@ -1553,7 +1556,7 @@
 .clipTitle {
   position: absolute;
   left: 8px;
-  right: 28px;
+  right: 8px;
   bottom: 7px;
   color: #ffffff;
   font-size: 11px;
@@ -1568,12 +1571,12 @@
 }
 
 .clipHasSplitAction .clipTitle {
-  right: 68px;
+  right: 52px;
 }
 
 .clipSplitButton {
   position: absolute;
-  right: 26px;
+  right: 6px;
   top: 5px;
   height: 16px;
   border: 0;
