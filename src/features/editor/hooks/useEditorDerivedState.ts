@@ -5,10 +5,11 @@ import { editableOverlayKinds } from "../model/constants";
 import { VideoElement, VideoSchema } from "../model/schema";
 import { ActiveOverlayElement, OverlayTrack, TrackVisualKind } from "../model/types";
 import {
+  getElementEffectiveTimelineRange,
   getElementLabel,
-  getElementTimelineStart,
-  getRenderedElementPosition,
   getScenePrimaryElement,
+  getRenderedElementPosition,
+  isFrameInRange,
 } from "../lib/utils";
 import styles from "../styles/editor.module.css";
 
@@ -114,8 +115,19 @@ export function useEditorDerivedState({
           return;
         }
 
-        const globalStartFrame = getElementTimelineStart(scene.startFrame, element);
-        const globalDuration = Math.max(1, element.durationInFrames);
+        const timelineRange = getElementEffectiveTimelineRange(
+          scene.startFrame,
+          scene.durationInFrames,
+          element,
+          videoSchema.durationInFrames,
+          { constrainToScene: false },
+        );
+        if (timelineRange.durationInFrames <= 0) {
+          return;
+        }
+
+        const globalStartFrame = timelineRange.startFrame;
+        const globalDuration = timelineRange.durationInFrames;
         tracks.push({
           sceneId: scene.id,
           sceneName: scene.name,
@@ -140,7 +152,7 @@ export function useEditorDerivedState({
     }
 
     return tracks;
-  }, [fps, timelineFrameSpan, videoSchema.scenes]);
+  }, [fps, timelineFrameSpan, videoSchema.durationInFrames, videoSchema.scenes]);
 
   const activeOverlayElements = useMemo<ActiveOverlayElement[]>(() => {
     const overlays: ActiveOverlayElement[] = [];
@@ -151,11 +163,17 @@ export function useEditorDerivedState({
           return;
         }
 
-        const timelineStartFrame = getElementTimelineStart(scene.startFrame, element);
-        if (currentFrame < timelineStartFrame || currentFrame >= timelineStartFrame + element.durationInFrames) {
+        const timelineRange = getElementEffectiveTimelineRange(
+          scene.startFrame,
+          scene.durationInFrames,
+          element,
+          videoSchema.durationInFrames,
+          { constrainToScene: false },
+        );
+        if (!isFrameInRange(currentFrame, timelineRange.startFrame, timelineRange.durationInFrames)) {
           return;
         }
-        const localFrame = currentFrame - timelineStartFrame;
+        const localFrame = currentFrame - timelineRange.startFrame;
         const renderedPosition = getRenderedElementPosition(element, localFrame);
 
         overlays.push({
@@ -170,7 +188,7 @@ export function useEditorDerivedState({
     }
 
     return overlays;
-  }, [currentFrame, videoSchema.scenes]);
+  }, [currentFrame, videoSchema.durationInFrames, videoSchema.scenes]);
 
   const selectedOverlayElement = useMemo<SelectedOverlayElement>(() => {
     if (!selectedElementKey) {
@@ -226,4 +244,3 @@ export function useEditorDerivedState({
     getElementClipKindClassName,
   };
 }
-

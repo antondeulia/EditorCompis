@@ -215,11 +215,56 @@ export function getScenePrimaryElement(scene: VideoSchema["scenes"][number]) {
 }
 
 export function getElementTimelineStart(sceneStartFrame: number, element: VideoElement) {
-  if (editableOverlayKinds.has(element.kind)) {
-    return element.timelineStartFrame ?? sceneStartFrame + element.startFrame;
-  }
+  return element.timelineStartFrame ?? sceneStartFrame + element.startFrame;
+}
 
-  return sceneStartFrame + element.startFrame;
+export function getSafeDurationInFrames(durationInFrames: number) {
+  return Math.max(1, Math.round(durationInFrames));
+}
+
+export function getFrameRange(startFrame: number, durationInFrames: number) {
+  const safeDuration = getSafeDurationInFrames(durationInFrames);
+  return {
+    startFrame,
+    durationInFrames: safeDuration,
+    endFrame: startFrame + safeDuration,
+  };
+}
+
+export function isFrameInRange(frame: number, startFrame: number, durationInFrames: number) {
+  const { endFrame } = getFrameRange(startFrame, durationInFrames);
+  return frame >= startFrame && frame < endFrame;
+}
+
+export function getElementEffectiveTimelineRange(
+  sceneStartFrame: number,
+  sceneDurationInFrames: number,
+  element: VideoElement,
+  schemaDurationInFrames?: number,
+  options?: {
+    constrainToScene?: boolean;
+  },
+) {
+  const rawStartFrame = getElementTimelineStart(sceneStartFrame, element);
+  const rawRange = getFrameRange(rawStartFrame, element.durationInFrames);
+  const shouldConstrainToScene = options?.constrainToScene ?? true;
+  const sceneRange = getFrameRange(sceneStartFrame, sceneDurationInFrames);
+  const boundedSchemaEnd = schemaDurationInFrames === undefined ? Number.POSITIVE_INFINITY : schemaDurationInFrames;
+  const clippedStartFrame = shouldConstrainToScene
+    ? Math.max(rawRange.startFrame, sceneRange.startFrame, 0)
+    : Math.max(rawRange.startFrame, 0);
+  const clippedEndFrame = shouldConstrainToScene
+    ? Math.min(rawRange.endFrame, sceneRange.endFrame, boundedSchemaEnd)
+    : Math.min(rawRange.endFrame, boundedSchemaEnd);
+  const durationInFrames = Math.max(0, clippedEndFrame - clippedStartFrame);
+
+  return {
+    rawStartFrame,
+    rawEndFrame: rawRange.endFrame,
+    startFrame: clippedStartFrame,
+    endFrame: clippedEndFrame,
+    durationInFrames,
+  };
 }
 
 export function normalizeOverlayTimeline(schema: VideoSchema): VideoSchema {

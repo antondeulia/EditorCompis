@@ -3,12 +3,12 @@
 import { CSSProperties } from "react";
 import { AbsoluteFill, Easing, Img, Sequence, Video, interpolate, useCurrentFrame } from "remotion";
 import { ElementAnimation, VideoElement, VideoSchema } from "../model/schema";
+import { getElementEffectiveTimelineRange, getFrameRange } from "../lib/utils";
+import { editableOverlayKinds } from "../model/constants";
 
 type VideoCompositionProps = {
   schema: VideoSchema;
 };
-
-const editableOverlayKinds = new Set<VideoElement["kind"]>(["text", "shape", "image"]);
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -139,23 +139,33 @@ export function VideoComposition({ schema }: VideoCompositionProps) {
   return (
     <AbsoluteFill style={{ backgroundColor: schema.backgroundColor }}>
       {schema.scenes.map((scene) => (
-        <Sequence key={scene.id} from={scene.startFrame} durationInFrames={Math.max(1, scene.durationInFrames)}>
+        <Sequence
+          key={scene.id}
+          from={scene.startFrame}
+          durationInFrames={getFrameRange(scene.startFrame, scene.durationInFrames).durationInFrames}
+        >
           <AbsoluteFill style={{ backgroundColor: scene.backgroundColor ?? schema.backgroundColor }}>
             {scene.elements.map((element) => {
               if (editableOverlayKinds.has(element.kind)) {
                 return null;
               }
 
-              const maxDuration = scene.durationInFrames - element.startFrame;
-              if (maxDuration <= 0) {
+              const timelineRange = getElementEffectiveTimelineRange(
+                scene.startFrame,
+                scene.durationInFrames,
+                element,
+                schema.durationInFrames,
+              );
+
+              if (timelineRange.durationInFrames <= 0) {
                 return null;
               }
 
               return (
                 <Sequence
                   key={element.id}
-                  from={element.startFrame}
-                  durationInFrames={Math.max(1, Math.min(element.durationInFrames, maxDuration))}
+                  from={timelineRange.startFrame - scene.startFrame}
+                  durationInFrames={timelineRange.durationInFrames}
                 >
                   <RenderElement element={element} />
                 </Sequence>
@@ -170,17 +180,23 @@ export function VideoComposition({ schema }: VideoCompositionProps) {
             return null;
           }
 
-          const startFrame = element.timelineStartFrame ?? scene.startFrame + element.startFrame;
-          const maxDuration = schema.durationInFrames - startFrame;
-          if (maxDuration <= 0) {
+          const timelineRange = getElementEffectiveTimelineRange(
+            scene.startFrame,
+            scene.durationInFrames,
+            element,
+            schema.durationInFrames,
+            { constrainToScene: false },
+          );
+
+          if (timelineRange.durationInFrames <= 0) {
             return null;
           }
 
           return (
             <Sequence
               key={`${scene.id}:${index}`}
-              from={startFrame}
-              durationInFrames={Math.max(1, Math.min(element.durationInFrames, maxDuration))}
+              from={timelineRange.startFrame}
+              durationInFrames={timelineRange.durationInFrames}
             >
               <RenderElement element={element} />
             </Sequence>

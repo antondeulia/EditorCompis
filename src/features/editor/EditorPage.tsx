@@ -250,7 +250,7 @@ export function Editor({ slug }: EditorProps) {
         scrubZoneRef={scrubZoneRef}
         timelineContentWidth={playback.timelineContentWidth}
         timelineScrollLeft={playback.timelineScrollLeft}
-        timelineMarks={playback.timelineMarks}
+        timelineRulerMarks={playback.timelineRulerMarks}
         timelineDurationSeconds={playback.timelineDurationSeconds}
         currentTime={playback.currentTime}
         onSeek={playback.handleSeek}
@@ -259,7 +259,6 @@ export function Editor({ slug }: EditorProps) {
         overlayTracks={derived.overlayTracks}
         selectedTimelineTrack={selectedTimelineTrack}
         selectedElementKey={selectedElementKey}
-        timelineZoomScale={playback.timelineZoomScale}
         fps={playback.fps}
         currentFrame={playback.currentFrame}
         suppressTrackClickUntilRef={suppressTrackClickUntilRef}

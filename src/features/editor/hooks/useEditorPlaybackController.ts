@@ -20,7 +20,7 @@ import {
   transportSeekStep,
   wheelZoomStep,
 } from "../model/constants";
-import { clamp, formatTime } from "../lib/utils";
+import { clamp } from "../lib/utils";
 import { VideoSchema } from "../model/schema";
 import { CompositionViewport } from "../model/types";
 
@@ -32,6 +32,19 @@ type Params = {
   timelineTracksRef: RefObject<HTMLDivElement | null>;
   videoSchema: VideoSchema;
 };
+
+type TimelineRulerMark = {
+  frame: number;
+  timeSeconds: number;
+  label: string;
+};
+
+function formatTimelineRulerLabel(seconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
 
 export function useEditorPlaybackController({
   playerRef,
@@ -60,13 +73,12 @@ export function useEditorPlaybackController({
 
   const durationInFrames = videoSchema.durationInFrames;
   const fps = videoSchema.fps;
-  const durationSeconds = durationInFrames / fps;
   const baseTimelineFrameSpan = useMemo(() => durationInFrames, [durationInFrames]);
   const timelineFrameSpan = baseTimelineFrameSpan + timelineExtraFrames;
   const timelineDurationSeconds = timelineFrameSpan / fps;
   const currentTime = currentFrame / fps;
-  const maxTimelineFrame = Math.max(durationInFrames - 1, 0);
-  const progress = maxTimelineFrame > 0 ? clamp(currentFrame / maxTimelineFrame, 0, 1) : 0;
+  const maxPlayheadFrame = Math.max(timelineFrameSpan - 1, 0);
+  const progress = maxPlayheadFrame > 0 ? clamp(currentFrame / maxPlayheadFrame, 0, 1) : 0;
   const timelineZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
   const timelineSpanRatio = durationInFrames > 0 ? timelineFrameSpan / durationInFrames : 1;
   const timelineContentWidth = `${timelineZoomScale * timelineSpanRatio * 100}%`;
@@ -75,10 +87,33 @@ export function useEditorPlaybackController({
     timelinePlayheadMetrics.offsetLeft,
     timelinePlayheadMetrics.offsetLeft + timelinePlayheadMetrics.width,
   );
-  const timelineMarks = useMemo(
-    () => Array.from({ length: 6 }, (_, i) => formatTime((timelineDurationSeconds * i) / 5)),
-    [timelineDurationSeconds],
-  );
+  const timelineRulerMarks = useMemo<TimelineRulerMark[]>(() => {
+    if (timelineDurationSeconds <= 0) {
+      return [{ frame: 0, timeSeconds: 0, label: formatTimelineRulerLabel(0) }];
+    }
+
+    const majorStepSeconds = 5;
+    const marks: TimelineRulerMark[] = [];
+
+    for (let second = 0; second <= timelineDurationSeconds + 0.0001; second += majorStepSeconds) {
+      const frame = Math.min(Math.round(second * fps), Math.max(timelineFrameSpan - 1, 0));
+      marks.push({
+        frame,
+        timeSeconds: second,
+        label: formatTimelineRulerLabel(second),
+      });
+    }
+
+    if (marks.length === 0 || marks[marks.length - 1].frame !== Math.max(timelineFrameSpan - 1, 0)) {
+      marks.push({
+        frame: Math.max(timelineFrameSpan - 1, 0),
+        timeSeconds: timelineDurationSeconds,
+        label: formatTimelineRulerLabel(timelineDurationSeconds),
+      });
+    }
+
+    return marks;
+  }, [fps, timelineDurationSeconds, timelineFrameSpan]);
 
   const seekToFrame = useCallback(
     (nextFrame: number) => {
@@ -221,15 +256,15 @@ export function useEditorPlaybackController({
     (clientX: number) => {
       const scrubZoneElement = scrubZoneRef.current;
 
-      if (!scrubZoneElement || durationSeconds <= 0) {
+      if (!scrubZoneElement || timelineDurationSeconds <= 0) {
         return;
       }
 
       const scrubZoneRect = scrubZoneElement.getBoundingClientRect();
       const ratio = clamp((clientX - scrubZoneRect.left) / Math.max(scrubZoneRect.width, 1), 0, 1);
-      handleSeek(ratio * durationSeconds);
+      handleSeek(ratio * timelineDurationSeconds);
     },
-    [durationSeconds, handleSeek, scrubZoneRef],
+    [handleSeek, scrubZoneRef, timelineDurationSeconds],
   );
 
   const beginScrub = useCallback(
@@ -428,7 +463,7 @@ export function useEditorPlaybackController({
     timelineZoomScale,
     timelineContentWidth,
     timelineScrollLeft,
-    timelineMarks,
+    timelineRulerMarks,
     playheadLeftPx,
     compositionViewport,
     seekToFrame,

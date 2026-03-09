@@ -38,7 +38,11 @@ type EditorTimelineProps = {
   scrubZoneRef: RefObject<HTMLButtonElement | null>;
   timelineContentWidth: string;
   timelineScrollLeft: number;
-  timelineMarks: string[];
+  timelineRulerMarks: Array<{
+    frame: number;
+    timeSeconds: number;
+    label: string;
+  }>;
   timelineDurationSeconds: number;
   currentTime: number;
   onSeek: (nextTime: number) => void;
@@ -47,7 +51,6 @@ type EditorTimelineProps = {
   overlayTracks: OverlayTrack[];
   selectedTimelineTrack: SelectedTimelineTrack | null;
   selectedElementKey: string | null;
-  timelineZoomScale: number;
   fps: number;
   currentFrame: number;
   suppressTrackClickUntilRef: RefObject<number>;
@@ -82,7 +85,7 @@ export function EditorTimeline({
   scrubZoneRef,
   timelineContentWidth,
   timelineScrollLeft,
-  timelineMarks,
+  timelineRulerMarks,
   timelineDurationSeconds,
   currentTime,
   onSeek,
@@ -91,7 +94,6 @@ export function EditorTimeline({
   overlayTracks,
   selectedTimelineTrack,
   selectedElementKey,
-  timelineZoomScale,
   fps,
   currentFrame,
   suppressTrackClickUntilRef,
@@ -139,154 +141,78 @@ export function EditorTimeline({
               transform: `translateX(${-timelineScrollLeft}px)`,
             }}
           >
-            {timelineMarks.map((mark, index) => (
-              <span key={`${mark}-${index}`}>{mark}</span>
+            {timelineRulerMarks.map((mark) => (
+              <span
+                key={`${mark.frame}-${mark.timeSeconds}`}
+                className={styles.timelineMark}
+                style={{ left: `${(mark.frame / Math.max(1, fps * timelineDurationSeconds)) * 100}%` }}
+              >
+                {mark.label}
+              </span>
             ))}
           </div>
           <div className={styles.tracks} ref={timelineTracksRef}>
-            <input
-              type="range"
-              min={0}
-              max={timelineDurationSeconds || 0}
-              step={0.001}
-              value={timelineDurationSeconds ? currentTime : 0}
-              onChange={(event) => onSeek(Number(event.target.value))}
-              className={styles.timelineScrubber}
-              aria-label="Timeline scrubber"
-            />
-            <button
-              type="button"
-              className={styles.timelineScrubZone}
-              ref={scrubZoneRef}
-              style={{ width: timelineContentWidth, right: "auto" }}
-              onPointerDown={(event) => onBeginScrub(event.clientX)}
-              aria-label="Seek timeline"
-            />
-            {sceneTracks.map((track) => {
-              const isSelected = selectedTimelineTrack?.kind === "scene" && selectedTimelineTrack.sceneId === track.id;
+            <div className={styles.tracksContent} style={{ width: timelineContentWidth }}>
+              <input
+                type="range"
+                min={0}
+                max={timelineDurationSeconds || 0}
+                step={0.001}
+                value={timelineDurationSeconds ? currentTime : 0}
+                onChange={(event) => onSeek(Number(event.target.value))}
+                className={styles.timelineScrubber}
+                aria-label="Timeline scrubber"
+              />
+              <button
+                type="button"
+                className={styles.timelineScrubZone}
+                ref={scrubZoneRef}
+                onPointerDown={(event) => onBeginScrub(event.clientX)}
+                aria-label="Seek timeline"
+              />
+              {sceneTracks.map((track) => {
+                const isSelected = selectedTimelineTrack?.kind === "scene" && selectedTimelineTrack.sceneId === track.id;
 
-              return (
-                <div className={styles.trackRow} key={`scene-${track.id}`}>
-                  <div className={styles.trackLane}>
-                    <div
-                      className={`${styles.clip} ${styles.sceneClip} ${getSceneClipKindClassName(track.visualKind)} ${isSelected ? styles.sceneClipSelected : ""}`}
-                      style={{
-                        left: `${track.start * timelineZoomScale}%`,
-                        width: `${track.width * timelineZoomScale}%`,
-                      }}
-                      data-selection-anchor="true"
-                      onPointerDown={(event) =>
-                        onBeginTimelineClipDrag(event, {
-                          kind: "scene",
-                          sceneId: track.id,
-                          startFrame: track.startFrame,
-                          startClientX: event.clientX,
-                        })
-                      }
-                      onClick={() => {
-                        if (Date.now() < (suppressTrackClickUntilRef.current ?? 0)) {
-                          return;
+                return (
+                  <div className={styles.trackRow} key={`scene-${track.id}`}>
+                    <div className={styles.trackLane}>
+                      <div
+                        className={`${styles.clip} ${styles.sceneClip} ${getSceneClipKindClassName(track.visualKind)} ${isSelected ? styles.sceneClipSelected : ""}`}
+                        style={{
+                          left: `${track.start}%`,
+                          width: `${track.width}%`,
+                        }}
+                        data-selection-anchor="true"
+                        onPointerDown={(event) =>
+                          onBeginTimelineClipDrag(event, {
+                            kind: "scene",
+                            sceneId: track.id,
+                            startFrame: track.startFrame,
+                            startClientX: event.clientX,
+                          })
                         }
+                        onClick={() => {
+                          if (Date.now() < (suppressTrackClickUntilRef.current ?? 0)) {
+                            return;
+                          }
 
-                        onSelectSceneTrack(track.id);
-                      }}
-                    >
-                      <TrackVisual
-                        kind={track.visualKind}
-                        title={track.name}
-                        src={track.previewSrc}
-                        waveformSeed={track.id}
-                        durationInFrames={track.durationInFrames}
-                        fps={fps}
-                      />
-                      <span className={styles.clipTitle}>
-                        {track.name} ({track.meta})
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.clipDeleteButton}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
+                          onSelectSceneTrack(track.id);
                         }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          onDeleteSceneTrack(track.id);
-                        }}
-                        aria-label={`Delete ${track.name} track`}
-                        title="Delete track"
                       >
-                        x
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {overlayTracks.map((track) => {
-              const trackKey = `${track.sceneId}:${track.elementIndex}`;
-              const isSelected = selectedElementKey === trackKey;
-
-              return (
-                <div className={styles.trackRow} key={`element-${trackKey}`}>
-                  <div className={styles.trackLane}>
-                    <div
-                      className={`${styles.clip} ${styles.elementClip} ${getElementClipKindClassName(track.visualKind)} ${isSelected ? styles.elementClipSelected : ""} ${isSelected ? styles.clipHasSplitAction : ""}`}
-                      style={{
-                        left: `${track.start * timelineZoomScale}%`,
-                        width: `${track.width * timelineZoomScale}%`,
-                      }}
-                      data-selection-anchor="true"
-                      onClick={() => {
-                        if (Date.now() < (suppressTrackClickUntilRef.current ?? 0)) {
-                          return;
-                        }
-
-                        onSelectElementTrack(track.sceneId, track.elementIndex);
-                      }}
-                      onPointerDown={(event) =>
-                        onBeginTimelineClipDrag(event, {
-                          kind: "element",
-                          sceneId: track.sceneId,
-                          elementIndex: track.elementIndex,
-                          startFrame: track.startFrame,
-                          startClientX: event.clientX,
-                        })
-                      }
-                    >
-                      <TrackVisual
-                        kind={track.visualKind}
-                        title={track.elementName}
-                        src={track.previewSrc}
-                        waveformSeed={track.elementId}
-                        durationInFrames={track.durationInFrames}
-                        fps={fps}
-                      />
-                      <span className={styles.clipTitle}>
-                        {track.elementKind}: {track.elementName} ({track.meta})
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.clipDeleteButton}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                        }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          onDeleteElementTrack(track.sceneId, track.elementIndex);
-                        }}
-                        aria-label={`Delete ${track.elementKind} track`}
-                        title="Delete track"
-                      >
-                        x
-                      </button>
-                      {isSelected ? (
+                        <TrackVisual
+                          kind={track.visualKind}
+                          title={track.name}
+                          src={track.previewSrc}
+                          waveformSeed={track.id}
+                          durationInFrames={track.durationInFrames}
+                          fps={fps}
+                        />
+                        <span className={styles.clipTitle}>
+                          {track.name} ({track.meta})
+                        </span>
                         <button
                           type="button"
-                          className={styles.clipSplitButton}
+                          className={styles.clipDeleteButton}
                           onPointerDown={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
@@ -294,24 +220,107 @@ export function EditorTimeline({
                           onClick={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            onSplitElementTrack(track.sceneId, track.elementIndex, currentFrame);
+                            onDeleteSceneTrack(track.id);
                           }}
-                          aria-label={`Split ${track.elementKind} track at playhead`}
-                          title="Split at playhead"
+                          aria-label={`Delete ${track.name} track`}
+                          title="Delete track"
                         >
-                          split
+                          x
                         </button>
-                      ) : null}
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+              {overlayTracks.map((track) => {
+                const trackKey = `${track.sceneId}:${track.elementIndex}`;
+                const isSelected = selectedElementKey === trackKey;
+
+                return (
+                  <div className={styles.trackRow} key={`element-${trackKey}`}>
+                    <div className={styles.trackLane}>
+                      <div
+                        className={`${styles.clip} ${styles.elementClip} ${getElementClipKindClassName(track.visualKind)} ${isSelected ? styles.elementClipSelected : ""} ${isSelected ? styles.clipHasSplitAction : ""}`}
+                        style={{
+                          left: `${track.start}%`,
+                          width: `${track.width}%`,
+                        }}
+                        data-selection-anchor="true"
+                        onClick={() => {
+                          if (Date.now() < (suppressTrackClickUntilRef.current ?? 0)) {
+                            return;
+                          }
+
+                          onSelectElementTrack(track.sceneId, track.elementIndex);
+                        }}
+                        onPointerDown={(event) =>
+                          onBeginTimelineClipDrag(event, {
+                            kind: "element",
+                            sceneId: track.sceneId,
+                            elementIndex: track.elementIndex,
+                            startFrame: track.startFrame,
+                            startClientX: event.clientX,
+                          })
+                        }
+                      >
+                        <TrackVisual
+                          kind={track.visualKind}
+                          title={track.elementName}
+                          src={track.previewSrc}
+                          waveformSeed={track.elementId}
+                          durationInFrames={track.durationInFrames}
+                          fps={fps}
+                        />
+                        <span className={styles.clipTitle}>
+                          {track.elementKind}: {track.elementName} ({track.meta})
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.clipDeleteButton}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onDeleteElementTrack(track.sceneId, track.elementIndex);
+                          }}
+                          aria-label={`Delete ${track.elementKind} track`}
+                          title="Delete track"
+                        >
+                          x
+                        </button>
+                        {isSelected ? (
+                          <button
+                            type="button"
+                            className={styles.clipSplitButton}
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onSplitElementTrack(track.sceneId, track.elementIndex, currentFrame);
+                            }}
+                            aria-label={`Split ${track.elementKind} track at playhead`}
+                            title="Split at playhead"
+                          >
+                            split
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className={`${styles.trackRow} ${styles.newTrackRow}`}>
+                <div className={`${styles.trackLane} ${styles.newTrackLane}`}>
+                  <button type="button" className={styles.newTrackButton} onClick={onAddTextTrack}>
+                    + New
+                  </button>
                 </div>
-              );
-            })}
-            <div className={`${styles.trackRow} ${styles.newTrackRow}`}>
-              <div className={`${styles.trackLane} ${styles.newTrackLane}`}>
-                <button type="button" className={styles.newTrackButton} onClick={onAddTextTrack}>
-                  + New
-                </button>
               </div>
             </div>
           </div>
