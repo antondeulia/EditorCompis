@@ -114,7 +114,6 @@ type EditorTimelineProps = {
   onSelectSceneTrack: (sceneId: string) => void;
   onSelectElementTrack: (sceneId: string, elementIndex: number) => void;
   onSplitElementTrack: (sceneId: string, elementIndex: number, frame: number) => void;
-  onAddTextTrack: () => void;
   playheadLeftPx: number;
 };
 
@@ -151,7 +150,6 @@ export function EditorTimeline({
   onSelectSceneTrack,
   onSelectElementTrack,
   onSplitElementTrack,
-  onAddTextTrack,
   playheadLeftPx,
 }: EditorTimelineProps) {
   const minScenePlaceholderRows = 2;
@@ -466,13 +464,6 @@ export function EditorTimeline({
                   </div>
                 </div>
               ))}
-              <div className={`${styles.trackRow} ${styles.newTrackRow}`}>
-                <div className={`${styles.trackLane} ${styles.newTrackLane}`}>
-                  <button type="button" className={styles.newTrackButton} onClick={onAddTextTrack}>
-                    + New
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
           <div className={styles.playheadLayer}>

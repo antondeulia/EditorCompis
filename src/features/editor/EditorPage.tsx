@@ -281,7 +281,6 @@ export function Editor({ slug }: EditorProps) {
           setSelectedElementKey(`${sceneId}:${elementIndex}`);
         }}
         onSplitElementTrack={splitElementTrack}
-        onAddTextTrack={addTextTrack}
         playheadLeftPx={playback.playheadLeftPx}
       />
     </div>

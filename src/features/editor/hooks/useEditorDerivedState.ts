@@ -84,8 +84,13 @@ export function useEditorDerivedState({
   }, []);
 
   const sceneTracks = useMemo<SceneTrack[]>(() => {
-    const tracks = videoSchema.scenes.map((scene, sceneIndex) => {
-      const primaryElement = getScenePrimaryElement(scene);
+    const tracks = videoSchema.scenes.flatMap((scene, sceneIndex) => {
+      const primaryElement =
+        scene.elements.find((element) => !editableOverlayKinds.has(element.kind))
+        ?? getScenePrimaryElement(scene);
+      if (!primaryElement || editableOverlayKinds.has(primaryElement.kind)) {
+        return [];
+      }
       const visualKind: TrackVisualKind =
         primaryElement?.kind === "video" || primaryElement?.kind === "image"
           ? primaryElement.kind
@@ -95,7 +100,7 @@ export function useEditorDerivedState({
       const previewSrc =
         primaryElement?.kind === "video" || primaryElement?.kind === "image" ? primaryElement.src : undefined;
 
-      return {
+      return [{
         id: scene.id,
         name: scene.name,
         lane: scene.timelineLane ?? sceneIndex,
@@ -108,7 +113,7 @@ export function useEditorDerivedState({
         meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
         visualKind,
         previewSrc,
-      };
+      }];
     });
 
     tracks.sort((a, b) => a.lane - b.lane || a.startFrame - b.startFrame || a.id.localeCompare(b.id));

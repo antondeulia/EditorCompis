@@ -3,7 +3,7 @@
 import { Dispatch, SetStateAction, useCallback } from "react";
 import { editableOverlayKinds } from "../model/constants";
 import { SelectedTimelineTrack } from "../model/types";
-import { clamp, getElementTimelineStart, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
+import { clamp, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
 import { VideoElement, VideoSchema } from "../model/schema";
 
 type SelectedOverlayElement =
@@ -256,72 +256,14 @@ export function useEditorSchemaActions({
 
   const deleteSceneTrack = useCallback((sceneId: string) => {
     setVideoSchema((prev) => {
-      const removeIndex = prev.scenes.findIndex((scene) => scene.id === sceneId);
-      if (removeIndex < 0) {
+      if (!prev.scenes.some((scene) => scene.id === sceneId)) {
         return prev;
       }
 
-      const removedScene = prev.scenes[removeIndex];
       const nextScenes = prev.scenes.filter((scene) => scene.id !== sceneId);
-      if (nextScenes.length === 0) {
-        const movedOverlayElements = removedScene.elements
-          .filter((element) => editableOverlayKinds.has(element.kind))
-          .map((element) => ({
-            ...element,
-            timelineStartFrame: element.timelineStartFrame ?? getElementTimelineStart(removedScene.startFrame, element),
-          }));
-
-        const fallbackSceneId = `scene-${Date.now().toString(36)}`;
-        return {
-          ...prev,
-          scenes: [
-            {
-              id: fallbackSceneId,
-              name: "Scene",
-              startFrame: 0,
-              durationInFrames: Math.max(1, prev.durationInFrames),
-              backgroundColor: prev.backgroundColor,
-              elements: movedOverlayElements,
-            },
-          ],
-        };
-      }
-
-      const targetSceneIndex = removeIndex > 0 ? removeIndex - 1 : 0;
-      const targetScene = nextScenes[targetSceneIndex];
-      if (!targetScene) {
-        return {
-          ...prev,
-          scenes: nextScenes,
-        };
-      }
-
-      const movedOverlayElements = removedScene.elements
-        .filter((element) => editableOverlayKinds.has(element.kind))
-        .map((element) => ({
-          ...element,
-          timelineStartFrame: element.timelineStartFrame ?? getElementTimelineStart(removedScene.startFrame, element),
-        }));
-
-      if (movedOverlayElements.length === 0) {
-        return {
-          ...prev,
-          scenes: nextScenes,
-        };
-      }
-
       return {
         ...prev,
-        scenes: nextScenes.map((scene) => {
-          if (scene.id !== targetScene.id) {
-            return scene;
-          }
-
-          return {
-            ...scene,
-            elements: [...scene.elements, ...movedOverlayElements],
-          };
-        }),
+        scenes: nextScenes,
       };
     });
     setSelectedElementKey((prev) => (prev?.startsWith(`${sceneId}:`) ? null : prev));
