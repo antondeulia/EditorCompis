@@ -11,6 +11,7 @@ type PlaybackToolbarProps = {
   onTogglePlay: () => void;
   onRewind: () => void;
   onForward: () => void;
+  onSplitFocusedTrack: () => void;
   onRender: () => void;
 };
 
@@ -106,6 +107,16 @@ function IconFocus() {
   );
 }
 
+function IconSplit() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 2V14" />
+      <path d="M4 4.5H7" />
+      <path d="M9 11.5H12" />
+    </svg>
+  );
+}
+
 function IconRender() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -124,6 +135,7 @@ export function PlaybackToolbar({
   onTogglePlay,
   onRewind,
   onForward,
+  onSplitFocusedTrack,
   onRender,
 }: PlaybackToolbarProps) {
   const [speed, setSpeed] = useState(speedOptions[1]);
@@ -208,8 +220,14 @@ export function PlaybackToolbar({
           </div>
 
           <div className={styles.zoomGroup}>
-            <button type="button" className={styles.iconButton} aria-label="Focus preview">
-              <IconFocus />
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={onSplitFocusedTrack}
+              aria-label="Split focused track"
+              title="Split focused track"
+            >
+              <IconSplit />
             </button>
             <button type="button" className={styles.iconButton} aria-label="Fullscreen preview">
               <IconFocus />

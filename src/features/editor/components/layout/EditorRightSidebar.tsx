@@ -13,6 +13,8 @@ type EditorRightSidebarProps = {
   selectedTextElement: Extract<VideoElement, { kind: "text" }> | null;
   onTextChange: (value: string) => void;
   onFontSizeChange: (value: number) => void;
+  onAddTextTrack: () => void;
+  onAddShapeTrack: (shape: "rect" | "circle") => void;
 };
 
 function renderElementsLibraryIcon(icon: ElementsLibraryIcon) {
@@ -186,6 +188,8 @@ export function EditorRightSidebar({
   selectedTextElement,
   onTextChange,
   onFontSizeChange,
+  onAddTextTrack,
+  onAddShapeTrack,
 }: EditorRightSidebarProps) {
   return (
     <aside className={`${styles.rightSidebar} ${styles.rightSidebarLight}`} aria-label="Editor tools">
@@ -316,6 +320,23 @@ export function EditorRightSidebar({
                           key={`${group.title}-${item.label || item.icon || index}`}
                           type="button"
                           className={styles.elementsLibraryCard}
+                          onClick={() => {
+                            if (group.title === "Text") {
+                              onAddTextTrack();
+                              return;
+                            }
+
+                            if (group.title === "Basic") {
+                              if (item.icon === "circle-outline" || item.icon === "circle-solid") {
+                                onAddShapeTrack("circle");
+                                return;
+                              }
+                              if (item.icon === "square-outline" || item.icon === "square-solid") {
+                                onAddShapeTrack("rect");
+                                return;
+                              }
+                            }
+                          }}
                         >
                           {item.icon ? (
                             <span className={styles.elementsLibraryCardIcon}>{renderElementsLibraryIcon(item.icon)}</span>

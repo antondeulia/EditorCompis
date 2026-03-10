@@ -129,7 +129,7 @@ export function useEditorDerivedState({
           scene.startFrame,
           scene.durationInFrames,
           element,
-          videoSchema.durationInFrames,
+          undefined,
           { constrainToScene: false },
         );
         if (timelineRange.durationInFrames <= 0) {
@@ -175,7 +175,7 @@ export function useEditorDerivedState({
         || a.elementIndex - b.elementIndex,
     );
     return tracks;
-  }, [fps, timelineFrameSpan, videoSchema.durationInFrames, videoSchema.scenes]);
+  }, [fps, timelineFrameSpan, videoSchema.scenes]);
 
   const activeOverlayElements = useMemo<ActiveOverlayElement[]>(() => {
     const overlays: ActiveOverlayElement[] = [];

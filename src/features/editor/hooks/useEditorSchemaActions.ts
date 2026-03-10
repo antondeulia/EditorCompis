@@ -31,6 +31,26 @@ export function useEditorSchemaActions({
   setSelectedElementKey,
   setSelectedTimelineTrack,
 }: Params) {
+  const ensureFallbackScene = useCallback((schema: VideoSchema) => {
+    if (schema.scenes.length > 0) {
+      return schema;
+    }
+
+    return {
+      ...schema,
+      scenes: [
+        {
+          id: `scene-${Date.now().toString(36)}`,
+          name: "Scene",
+          startFrame: 0,
+          durationInFrames: Math.max(1, schema.durationInFrames),
+          backgroundColor: schema.backgroundColor,
+          elements: [],
+        },
+      ],
+    };
+  }, []);
+
   const updateElementPosition = useCallback(
     (sceneId: string, elementIndex: number, nextX: number, nextY: number) => {
       setVideoSchema((prev) => ({
@@ -138,18 +158,15 @@ export function useEditorSchemaActions({
     let nextSelected: string | null = null;
 
     setVideoSchema((prev) => {
-      if (prev.scenes.length === 0) {
-        return prev;
-      }
-
-      const targetScene = prev.scenes[0];
+      const safeSchema = ensureFallbackScene(prev);
+      const targetScene = safeSchema.scenes[0];
       const globalStart = clamp(currentFrame, 0, Math.max(0, prev.durationInFrames - 1));
       const duration = Math.max(30, Math.min(180, prev.durationInFrames - globalStart));
       const id = `text-${Date.now().toString(36)}`;
 
       return {
-        ...prev,
-        scenes: prev.scenes.map((scene) => {
+        ...safeSchema,
+        scenes: safeSchema.scenes.map((scene) => {
           if (scene.id !== targetScene.id) {
             return scene;
           }
@@ -185,13 +202,128 @@ export function useEditorSchemaActions({
     if (nextSelected) {
       setSelectedElementKey(nextSelected);
     }
-  }, [currentFrame, setSelectedElementKey, setVideoSchema]);
+  }, [currentFrame, ensureFallbackScene, setSelectedElementKey, setVideoSchema]);
+
+  const addShapeTrack = useCallback(
+    (shape: "rect" | "circle") => {
+      let nextSelected: string | null = null;
+
+      setVideoSchema((prev) => {
+        const safeSchema = ensureFallbackScene(prev);
+        const targetScene = safeSchema.scenes[0];
+        const globalStart = clamp(currentFrame, 0, Math.max(0, safeSchema.durationInFrames - 1));
+        const duration = Math.max(30, Math.min(180, safeSchema.durationInFrames - globalStart));
+        const id = `shape-${Date.now().toString(36)}`;
+
+        return {
+          ...safeSchema,
+          scenes: safeSchema.scenes.map((scene) => {
+            if (scene.id !== targetScene.id) {
+              return scene;
+            }
+
+            nextSelected = `${scene.id}:${scene.elements.length}`;
+            return {
+              ...scene,
+              elements: [
+                ...scene.elements,
+                {
+                  id,
+                  kind: "shape",
+                  shape,
+                  fill: shape === "circle" ? "rgba(59, 130, 246, 0.85)" : "rgba(139, 92, 246, 0.85)",
+                  startFrame: 0,
+                  timelineStartFrame: globalStart,
+                  durationInFrames: duration,
+                  x: shape === "circle" ? 380 : 210,
+                  y: 520,
+                  width: shape === "circle" ? 280 : 620,
+                  height: 280,
+                  borderRadius: shape === "circle" ? undefined : 22,
+                },
+              ],
+            };
+          }),
+        };
+      });
+
+      if (nextSelected) {
+        setSelectedElementKey(nextSelected);
+      }
+    },
+    [currentFrame, ensureFallbackScene, setSelectedElementKey, setVideoSchema],
+  );
 
   const deleteSceneTrack = useCallback((sceneId: string) => {
-    setVideoSchema((prev) => ({
-      ...prev,
-      scenes: prev.scenes.filter((scene) => scene.id !== sceneId),
-    }));
+    setVideoSchema((prev) => {
+      const removeIndex = prev.scenes.findIndex((scene) => scene.id === sceneId);
+      if (removeIndex < 0) {
+        return prev;
+      }
+
+      const removedScene = prev.scenes[removeIndex];
+      const nextScenes = prev.scenes.filter((scene) => scene.id !== sceneId);
+      if (nextScenes.length === 0) {
+        const movedOverlayElements = removedScene.elements
+          .filter((element) => editableOverlayKinds.has(element.kind))
+          .map((element) => ({
+            ...element,
+            timelineStartFrame: element.timelineStartFrame ?? getElementTimelineStart(removedScene.startFrame, element),
+          }));
+
+        const fallbackSceneId = `scene-${Date.now().toString(36)}`;
+        return {
+          ...prev,
+          scenes: [
+            {
+              id: fallbackSceneId,
+              name: "Scene",
+              startFrame: 0,
+              durationInFrames: Math.max(1, prev.durationInFrames),
+              backgroundColor: prev.backgroundColor,
+              elements: movedOverlayElements,
+            },
+          ],
+        };
+      }
+
+      const targetSceneIndex = removeIndex > 0 ? removeIndex - 1 : 0;
+      const targetScene = nextScenes[targetSceneIndex];
+      if (!targetScene) {
+        return {
+          ...prev,
+          scenes: nextScenes,
+        };
+      }
+
+      const movedOverlayElements = removedScene.elements
+        .filter((element) => editableOverlayKinds.has(element.kind))
+        .map((element) => ({
+          ...element,
+          timelineStartFrame: element.timelineStartFrame ?? getElementTimelineStart(removedScene.startFrame, element),
+        }));
+
+      if (movedOverlayElements.length === 0) {
+        return {
+          ...prev,
+          scenes: nextScenes,
+        };
+      }
+
+      return {
+        ...prev,
+        scenes: nextScenes.map((scene) => {
+          if (scene.id !== targetScene.id) {
+            return scene;
+          }
+
+          return {
+            ...scene,
+            elements: [...scene.elements, ...movedOverlayElements],
+          };
+        }),
+      };
+    });
     setSelectedElementKey((prev) => (prev?.startsWith(`${sceneId}:`) ? null : prev));
     setSelectedTimelineTrack((prev) => {
       if (!prev) {
@@ -381,6 +513,7 @@ export function useEditorSchemaActions({
     updateElementPosition,
     updateElementBounds,
     addTextTrack,
+    addShapeTrack,
     deleteSceneTrack,
     deleteElementTrack,
     splitElementTrack,

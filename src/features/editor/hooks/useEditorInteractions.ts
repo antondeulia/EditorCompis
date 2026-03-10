@@ -186,6 +186,7 @@ export function useEditorInteractions({
     const drag = timelineDragState;
     const trackRowHeight = 36;
     let hasMoved = false;
+    let maxRequiredDuration = 0;
     let lastAppliedStartFrame = Number.NaN;
     let lastAppliedLane = Number.NaN;
     let rafId: number | null = null;
@@ -219,24 +220,15 @@ export function useEditorInteractions({
 
       if (drag.kind === "scene") {
         setVideoSchema((prev) => {
-          const orderedScenes = prev.scenes
-            .map((scene, index) => ({
-              id: scene.id,
-              lane: scene.timelineLane ?? index,
-            }))
-            .sort((a, b) => a.lane - b.lane || a.id.localeCompare(b.id));
-          const fromIndex = orderedScenes.findIndex((scene) => scene.id === drag.sceneId);
-          if (fromIndex >= 0 && fromIndex !== nextLane) {
-            const [moved] = orderedScenes.splice(fromIndex, 1);
-            orderedScenes.splice(nextLane, 0, moved);
-          }
-          const laneBySceneId = new Map(orderedScenes.map((scene, index) => [scene.id, index] as const));
+          const movedScene = prev.scenes.find((scene) => scene.id === drag.sceneId);
+          const movedSceneDuration = Math.max(1, movedScene?.durationInFrames ?? 1);
+          const requiredDuration = nextStartFrame + movedSceneDuration;
+          maxRequiredDuration = Math.max(maxRequiredDuration, requiredDuration);
 
           let hasChange = false;
           const nextScenes = prev.scenes.map((scene, index) => {
-            const nextSceneLane = laneBySceneId.get(scene.id) ?? (scene.timelineLane ?? index);
             const shouldMoveFrame = scene.id === drag.sceneId && scene.startFrame !== nextStartFrame;
-            const shouldMoveLane = (scene.timelineLane ?? index) !== nextSceneLane;
+            const shouldMoveLane = scene.id === drag.sceneId && (scene.timelineLane ?? index) !== nextLane;
             if (!shouldMoveFrame && !shouldMoveLane) {
               return scene;
             }
@@ -245,7 +237,7 @@ export function useEditorInteractions({
             return {
               ...scene,
               startFrame: shouldMoveFrame ? nextStartFrame : scene.startFrame,
-              timelineLane: nextSceneLane,
+              timelineLane: shouldMoveLane ? nextLane : (scene.timelineLane ?? index),
             };
           });
 
@@ -263,37 +255,12 @@ export function useEditorInteractions({
       }
 
       setVideoSchema((prev) => {
-        let fallbackLane = 0;
-        const orderedOverlays = prev.scenes.flatMap((scene) =>
-          scene.elements
-            .map((element, index) => ({ sceneId: scene.id, elementIndex: index, element }))
-            .filter((entry) => editableOverlayKinds.has(entry.element.kind))
-            .map((entry) => {
-              const lane = entry.element.timelineLane ?? fallbackLane;
-              fallbackLane += 1;
-              return {
-                sceneId: entry.sceneId,
-                elementIndex: entry.elementIndex,
-                lane,
-              };
-            }),
-        );
-        orderedOverlays.sort(
-          (a, b) =>
-            a.lane - b.lane
-            || a.sceneId.localeCompare(b.sceneId)
-            || a.elementIndex - b.elementIndex,
-        );
-        const fromIndex = orderedOverlays.findIndex(
-          (entry) => entry.sceneId === drag.sceneId && entry.elementIndex === drag.elementIndex,
-        );
-        if (fromIndex >= 0 && fromIndex !== nextLane) {
-          const [moved] = orderedOverlays.splice(fromIndex, 1);
-          orderedOverlays.splice(nextLane, 0, moved);
-        }
-        const laneByElementKey = new Map(
-          orderedOverlays.map((entry, index) => [`${entry.sceneId}:${entry.elementIndex}`, index] as const),
-        );
+        const movedElement = prev.scenes
+          .find((scene) => scene.id === drag.sceneId)
+          ?.elements[drag.elementIndex];
+        const movedElementDuration = Math.max(1, movedElement?.durationInFrames ?? 1);
+        const requiredDuration = nextStartFrame + movedElementDuration;
+        maxRequiredDuration = Math.max(maxRequiredDuration, requiredDuration);
 
         let hasSceneChange = false;
         const nextScenes = prev.scenes.map((scene) => {
@@ -303,10 +270,11 @@ export function useEditorInteractions({
               return element;
             }
 
-            const elementKey = `${scene.id}:${index}`;
-            const nextElementLane = laneByElementKey.get(elementKey) ?? element.timelineLane ?? 0;
             const shouldMoveFrame = scene.id === drag.sceneId && index === drag.elementIndex && element.timelineStartFrame !== nextStartFrame;
-            const shouldMoveLane = element.timelineLane !== nextElementLane;
+            const shouldMoveLane =
+              scene.id === drag.sceneId
+              && index === drag.elementIndex
+              && (element.timelineLane ?? 0) !== nextLane;
 
             if (!shouldMoveFrame && !shouldMoveLane) {
               return element;
@@ -316,7 +284,7 @@ export function useEditorInteractions({
             return {
               ...element,
               timelineStartFrame: shouldMoveFrame ? nextStartFrame : element.timelineStartFrame,
-              timelineLane: nextElementLane,
+              timelineLane: shouldMoveLane ? nextLane : (element.timelineLane ?? 0),
             };
           });
 
@@ -380,6 +348,12 @@ export function useEditorInteractions({
       if (hasMoved) {
         suppressTrackClickUntilRef.current = Date.now() + 150;
       }
+      if (maxRequiredDuration > 0) {
+        setVideoSchema((prev) => ({
+          ...prev,
+          durationInFrames: Math.max(prev.durationInFrames, Math.ceil(maxRequiredDuration)),
+        }));
+      }
       setTimelineDragState(null);
     }
 
@@ -406,6 +380,7 @@ export function useEditorInteractions({
 
     const trim = timelineTrimState;
     let hasMoved = false;
+    let maxRequiredDuration = 0;
     let lastAppliedStartFrame = Number.NaN;
     let lastAppliedDuration = Number.NaN;
     let rafId: number | null = null;
@@ -450,6 +425,8 @@ export function useEditorInteractions({
 
       if (trim.kind === "scene") {
         setVideoSchema((prev) => {
+          const requiredDuration = nextStartFrame + nextDuration;
+          maxRequiredDuration = Math.max(maxRequiredDuration, requiredDuration);
           let hasChange = false;
           const nextScenes = prev.scenes.map((scene) => {
             if (scene.id !== trim.sceneId) {
@@ -492,6 +469,8 @@ export function useEditorInteractions({
       }
 
       setVideoSchema((prev) => {
+        const requiredDuration = nextStartFrame + nextDuration;
+        maxRequiredDuration = Math.max(maxRequiredDuration, requiredDuration);
         let hasSceneChange = false;
         const nextScenes = prev.scenes.map((scene) => {
           if (scene.id !== trim.sceneId) {
@@ -581,6 +560,12 @@ export function useEditorInteractions({
 
       if (hasMoved) {
         suppressTrackClickUntilRef.current = Date.now() + 150;
+      }
+      if (maxRequiredDuration > 0) {
+        setVideoSchema((prev) => ({
+          ...prev,
+          durationInFrames: Math.max(prev.durationInFrames, Math.ceil(maxRequiredDuration)),
+        }));
       }
       setTimelineTrimState(null);
     }

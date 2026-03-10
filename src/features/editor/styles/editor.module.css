@@ -1222,7 +1222,7 @@
   position: relative;
   border-bottom: 1px solid #d2dbea;
   display: block;
-  padding: 12px calc(var(--timeline-side-padding) + var(--timeline-right-gap)) 0
+  padding: 0 calc(var(--timeline-side-padding) + var(--timeline-right-gap)) 0
     var(--timeline-side-padding);
   color: #6f8098;
   font-size: 12px;
@@ -1231,38 +1231,36 @@
 }
 
 .timelineHeader::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 10px;
-  background-image:
-    repeating-linear-gradient(
-      to right,
-      rgba(var(--color-accent-rgb), 0.18) 0,
-      rgba(var(--color-accent-rgb), 0.18) 1px,
-      transparent 1px,
-      transparent 10px
-    ),
-    repeating-linear-gradient(
-      to right,
-      rgba(var(--color-accent-rgb), 0.32) 0,
-      rgba(var(--color-accent-rgb), 0.32) 1px,
-      transparent 1px,
-      transparent 50px
-    );
+  content: none;
 }
 
 .timelineHeader::after {
   content: none;
 }
 
+.timelineTick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 7px;
+  background: rgba(var(--color-accent-rgb), 0.45);
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+.timelineTickMajor {
+  width: 2px;
+  height: 11px;
+  background: rgba(var(--color-accent-rgb), 0.7);
+}
+
 .timelineMark {
   position: absolute;
-  top: 12px;
+  top: 4px;
+  line-height: 1;
   transform: translateX(-50%);
   white-space: nowrap;
+  z-index: 2;
 }
 
 .timelineHeader span {
@@ -1348,7 +1346,8 @@
 .newTrackLane {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-left: 8px;
 }
 
 .newTrackButton {
@@ -1610,7 +1609,7 @@
   border: 0;
   padding: 0;
   transform: translateX(0);
-  cursor: ew-resize;
+  cursor: grab;
   z-index: 2;
   pointer-events: auto;
 }
@@ -1647,7 +1646,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  cursor: ew-resize;
+  cursor: default;
   z-index: 1;
   outline: none;
   box-shadow: none;

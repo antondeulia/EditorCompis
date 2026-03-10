@@ -88,6 +88,7 @@ export function Editor({ slug }: EditorProps) {
     updateElementPosition,
     updateElementBounds,
     addTextTrack,
+    addShapeTrack,
     splitElementTrack,
     splitSelectedTimelineTrack,
     deleteSelectedTimelineTrack,
@@ -173,6 +174,8 @@ export function Editor({ slug }: EditorProps) {
             fontSize: Math.max(8, Math.min(300, Math.round(value))),
           }))
         }
+        onAddTextTrack={addTextTrack}
+        onAddShapeTrack={addShapeTrack}
       />
 
       <div
@@ -231,6 +234,7 @@ export function Editor({ slug }: EditorProps) {
         onTogglePlay={playback.togglePlay}
         onRewind={playback.rewind}
         onForward={playback.forward}
+        onSplitFocusedTrack={splitSelectedTimelineTrack}
         onRender={handleSaveProject}
       />
 
