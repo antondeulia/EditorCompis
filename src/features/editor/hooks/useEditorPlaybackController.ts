@@ -60,6 +60,8 @@ export function useEditorPlaybackController({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubPreviewProgress, setScrubPreviewProgress] = useState<number | null>(null);
+  const [scrubPreviewLeftPx, setScrubPreviewLeftPx] = useState<number | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(38);
   const [timelineExtraFrames, setTimelineExtraFrames] = useState(0);
   const [timelinePlayheadMetrics, setTimelinePlayheadMetrics] = useState({ offsetLeft: 0, width: 1 });
@@ -76,14 +78,16 @@ export function useEditorPlaybackController({
   const fps = videoSchema.fps;
   const baseTimelineFrameSpan = useMemo(() => durationInFrames, [durationInFrames]);
   const timelineFrameSpan = baseTimelineFrameSpan + timelineExtraFrames;
+  const maxTimelineFrame = Math.max(timelineFrameSpan - 1, 0);
   const timelineDurationSeconds = timelineFrameSpan / fps;
   const currentTime = currentFrame / fps;
-  const progress = timelineFrameSpan > 0 ? clamp(currentFrame / timelineFrameSpan, 0, 1) : 0;
+  const progress = maxTimelineFrame > 0 ? clamp(currentFrame / maxTimelineFrame, 0, 1) : 0;
+  const visiblePlayheadProgress = scrubPreviewProgress ?? progress;
   const timelineZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
   const timelineSpanRatio = durationInFrames > 0 ? timelineFrameSpan / durationInFrames : 1;
   const timelineContentWidth = `${timelineZoomScale * timelineSpanRatio * 100}%`;
   const playheadLeftPx = clamp(
-    timelinePlayheadMetrics.offsetLeft + progress * timelinePlayheadMetrics.width,
+    scrubPreviewLeftPx ?? (timelinePlayheadMetrics.offsetLeft + visiblePlayheadProgress * timelinePlayheadMetrics.width),
     timelinePlayheadMetrics.offsetLeft,
     timelinePlayheadMetrics.offsetLeft + timelinePlayheadMetrics.width,
   );
@@ -123,8 +127,8 @@ export function useEditorPlaybackController({
       }
 
       const maxMediaFrame = Math.max(durationInFrames - 1, 0);
-      const maxTimelineFrame = Math.max(timelineFrameSpan - 1, 0);
-      const boundedTimelineFrame = clamp(Math.floor(nextFrame), 0, maxTimelineFrame);
+      const maxAllowedTimelineFrame = Math.max(timelineFrameSpan - 1, 0);
+      const boundedTimelineFrame = clamp(Math.round(nextFrame), 0, maxAllowedTimelineFrame);
       if (options?.allowTimelineOverflow && boundedTimelineFrame > maxMediaFrame) {
         // Allow manual playhead moves in the extended timeline while keeping player on the last real frame.
         timelineDetachedFromPlayerRef.current = true;
@@ -178,12 +182,15 @@ export function useEditorPlaybackController({
     player.play();
   }, [currentFrame, durationInFrames, isPlaying, playerRef]);
 
-  const handleSeek = useCallback(
-    (nextTime: number) => {
-      seekToFrame(nextTime * fps, { allowTimelineOverflow: true });
-    },
-    [fps, seekToFrame],
-  );
+  const handleSeek = useCallback((nextTime: number) => {
+    if (timelineDurationSeconds <= 0) {
+      seekToFrame(0, { allowTimelineOverflow: true });
+      return;
+    }
+
+    const ratio = clamp(nextTime / timelineDurationSeconds, 0, 1);
+    seekToFrame(ratio * maxTimelineFrame, { allowTimelineOverflow: true });
+  }, [maxTimelineFrame, seekToFrame, timelineDurationSeconds]);
 
   const handleTimelineZoomChange = useCallback((nextZoom: number) => {
     setTimelineZoom(clamp(nextZoom, minTimelineZoom, maxTimelineZoom));
@@ -280,10 +287,15 @@ export function useEditorPlaybackController({
       }
 
       const scrubZoneRect = scrubZoneElement.getBoundingClientRect();
+      const timelineMainRect = timelineMainRef.current?.getBoundingClientRect();
       const ratio = clamp((clientX - scrubZoneRect.left) / Math.max(scrubZoneRect.width, 1), 0, 1);
-      handleSeek(ratio * timelineDurationSeconds);
+      setScrubPreviewProgress(ratio);
+      if (timelineMainRect) {
+        setScrubPreviewLeftPx(clientX - timelineMainRect.left);
+      }
+      seekToFrame(ratio * maxTimelineFrame, { allowTimelineOverflow: true });
     },
-    [handleSeek, scrubZoneRef, timelineDurationSeconds],
+    [maxTimelineFrame, scrubZoneRef, seekToFrame, timelineDurationSeconds, timelineMainRef],
   );
 
   const beginScrub = useCallback(
@@ -384,7 +396,7 @@ export function useEditorPlaybackController({
       timelineElement.removeEventListener("scroll", updatePlayheadMetrics);
       window.removeEventListener("resize", updatePlayheadMetrics);
     };
-  }, [scrubZoneRef, timelineMainRef, timelineTracksRef, timelineZoom]);
+  }, [scrubZoneRef, timelineMainRef, timelineTracksRef, timelineFrameSpan, timelineZoom]);
 
   useEffect(() => {
     const timelineElement = timelineTracksRef.current;
@@ -462,6 +474,8 @@ export function useEditorPlaybackController({
 
     function stopScrub() {
       setIsScrubbing(false);
+      setScrubPreviewProgress(null);
+      setScrubPreviewLeftPx(null);
     }
 
     window.addEventListener("pointermove", handlePointerMove);
