@@ -55,6 +55,7 @@ export function useEditorPlaybackController({
   videoSchema,
 }: Params) {
   const pendingTimelineScrollLeftRef = useRef<number | null>(null);
+  const timelineDetachedFromPlayerRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -115,17 +116,29 @@ export function useEditorPlaybackController({
   }, [fps, timelineDurationSeconds, timelineFrameSpan]);
 
   const seekToFrame = useCallback(
-    (nextFrame: number) => {
+    (nextFrame: number, options?: { allowTimelineOverflow?: boolean }) => {
       const player = playerRef.current;
       if (!player) {
         return;
       }
 
-      const boundedFrame = clamp(Math.floor(nextFrame), 0, Math.max(durationInFrames - 1, 0));
+      const maxMediaFrame = Math.max(durationInFrames - 1, 0);
+      const maxTimelineFrame = Math.max(timelineFrameSpan - 1, 0);
+      const boundedTimelineFrame = clamp(Math.floor(nextFrame), 0, maxTimelineFrame);
+      if (options?.allowTimelineOverflow && boundedTimelineFrame > maxMediaFrame) {
+        // Allow manual playhead moves in the extended timeline while keeping player on the last real frame.
+        timelineDetachedFromPlayerRef.current = true;
+        player.seekTo(maxMediaFrame);
+        setCurrentFrame(boundedTimelineFrame);
+        return;
+      }
+
+      timelineDetachedFromPlayerRef.current = false;
+      const boundedFrame = clamp(boundedTimelineFrame, 0, maxMediaFrame);
       player.seekTo(boundedFrame);
       setCurrentFrame(boundedFrame);
     },
-    [durationInFrames, playerRef],
+    [durationInFrames, playerRef, timelineFrameSpan],
   );
 
   const seekBy = useCallback(
@@ -155,12 +168,19 @@ export function useEditorPlaybackController({
       return;
     }
 
+    timelineDetachedFromPlayerRef.current = false;
+    const maxMediaFrame = Math.max(durationInFrames - 1, 0);
+    if (currentFrame > maxMediaFrame) {
+      player.seekTo(maxMediaFrame);
+      setCurrentFrame(maxMediaFrame);
+    }
+
     player.play();
-  }, [isPlaying, playerRef]);
+  }, [currentFrame, durationInFrames, isPlaying, playerRef]);
 
   const handleSeek = useCallback(
     (nextTime: number) => {
-      seekToFrame(nextTime * fps);
+      seekToFrame(nextTime * fps, { allowTimelineOverflow: true });
     },
     [fps, seekToFrame],
   );
@@ -283,7 +303,12 @@ export function useEditorPlaybackController({
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => setIsPlaying(false);
-    const onFrameUpdate = ({ detail }: { detail: { frame: number } }) => setCurrentFrame(detail.frame);
+    const onFrameUpdate = ({ detail }: { detail: { frame: number } }) => {
+      if (timelineDetachedFromPlayerRef.current) {
+        return;
+      }
+      setCurrentFrame(detail.frame);
+    };
 
     player.addEventListener("play", onPlay);
     player.addEventListener("pause", onPause);
