@@ -12,6 +12,7 @@ export type AssetItem = {
   kind: AssetKind;
   src?: string;
   sizeLabel: string;
+  mediaLabel?: string;
   revokeOnDispose?: boolean;
 };
 

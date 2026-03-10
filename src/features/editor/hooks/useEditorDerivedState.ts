@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { editableOverlayKinds } from "../model/constants";
+import { timelineTrackableKinds } from "../model/constants";
 import { VideoElement, VideoSchema } from "../model/schema";
 import { ActiveOverlayElement, OverlayTrack, TrackVisualKind } from "../model/types";
 import {
@@ -57,6 +57,18 @@ export function useEditorDerivedState({
   timelineFrameSpan,
   selectedElementKey,
 }: Params) {
+  const isTimelineOverlayElement = useCallback((element: VideoElement) => {
+    if (!timelineTrackableKinds.has(element.kind)) {
+      return false;
+    }
+
+    if (element.kind !== "video") {
+      return true;
+    }
+
+    return element.timelineStartFrame !== undefined;
+  }, []);
+
   const getSceneClipKindClassName = useCallback((kind: TrackVisualKind) => {
     switch (kind) {
       case "text":
@@ -86,9 +98,9 @@ export function useEditorDerivedState({
   const sceneTracks = useMemo<SceneTrack[]>(() => {
     const tracks = videoSchema.scenes.flatMap((scene, sceneIndex) => {
       const primaryElement =
-        scene.elements.find((element) => !editableOverlayKinds.has(element.kind))
+        scene.elements.find((element) => !isTimelineOverlayElement(element))
         ?? getScenePrimaryElement(scene);
-      if (!primaryElement || editableOverlayKinds.has(primaryElement.kind)) {
+      if (!primaryElement || isTimelineOverlayElement(primaryElement)) {
         return [];
       }
       const visualKind: TrackVisualKind =
@@ -118,7 +130,7 @@ export function useEditorDerivedState({
 
     tracks.sort((a, b) => a.lane - b.lane || a.startFrame - b.startFrame || a.id.localeCompare(b.id));
     return tracks;
-  }, [fps, timelineFrameSpan, videoSchema.scenes]);
+  }, [fps, isTimelineOverlayElement, timelineFrameSpan, videoSchema.scenes]);
 
   const overlayTracks = useMemo<OverlayTrack[]>(() => {
     const tracks: OverlayTrack[] = [];
@@ -126,7 +138,7 @@ export function useEditorDerivedState({
 
     for (const scene of videoSchema.scenes) {
       scene.elements.forEach((element, elementIndex) => {
-        if (!editableOverlayKinds.has(element.kind)) {
+        if (!isTimelineOverlayElement(element)) {
           return;
         }
 
@@ -180,14 +192,14 @@ export function useEditorDerivedState({
         || a.elementIndex - b.elementIndex,
     );
     return tracks;
-  }, [fps, timelineFrameSpan, videoSchema.scenes]);
+  }, [fps, isTimelineOverlayElement, timelineFrameSpan, videoSchema.scenes]);
 
   const activeOverlayElements = useMemo<ActiveOverlayElement[]>(() => {
     const overlays: ActiveOverlayElement[] = [];
 
     for (const scene of videoSchema.scenes) {
       scene.elements.forEach((element, elementIndex) => {
-        if (!editableOverlayKinds.has(element.kind)) {
+        if (!isTimelineOverlayElement(element)) {
           return;
         }
 
@@ -216,7 +228,7 @@ export function useEditorDerivedState({
     }
 
     return overlays;
-  }, [currentFrame, videoSchema.durationInFrames, videoSchema.scenes]);
+  }, [currentFrame, isTimelineOverlayElement, videoSchema.durationInFrames, videoSchema.scenes]);
 
   const selectedOverlayElement = useMemo<SelectedOverlayElement>(() => {
     if (!selectedElementKey) {
@@ -235,7 +247,7 @@ export function useEditorDerivedState({
     }
 
     const element = scene.elements[elementIndex];
-    if (!element || !editableOverlayKinds.has(element.kind)) {
+    if (!element || !isTimelineOverlayElement(element)) {
       return null;
     }
 
@@ -244,7 +256,7 @@ export function useEditorDerivedState({
       elementIndex,
       element,
     };
-  }, [selectedElementKey, videoSchema.scenes]);
+  }, [isTimelineOverlayElement, selectedElementKey, videoSchema.scenes]);
 
   const inspectorRows = useMemo<InspectorRow[]>(
     () => [

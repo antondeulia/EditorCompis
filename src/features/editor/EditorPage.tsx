@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PlayerRef } from "@remotion/player";
 import { EditorLeftRail } from "./components/layout/EditorLeftRail";
 import { EditorRightSidebar } from "./components/layout/EditorRightSidebar";
@@ -31,8 +31,8 @@ export function Editor({ slug }: EditorProps) {
   const initialAssets = useMemo(
     () => [
       ...collectAssetsFromSchema(demoVideoSchema),
-      { id: "audio-bed", name: "music-track.wav", kind: "audio", sizeLabel: "Audio" },
-      { id: "captions", name: "captions.srt", kind: "other", sizeLabel: "Subtitle" },
+      { id: "audio-bed", name: "music-track.wav", kind: "audio", sizeLabel: "Audio", mediaLabel: "Audio" },
+      { id: "captions", name: "captions.srt", kind: "other", sizeLabel: "Subtitle", mediaLabel: "Subtitle" },
     ],
     [],
   );
@@ -79,6 +79,7 @@ export function Editor({ slug }: EditorProps) {
     currentFrame: playback.currentFrame,
     selectedTimelineTrack,
     selectedOverlayElement: derived.selectedOverlayElement,
+    resolveAssetById: (assetId) => ui.assets.find((asset) => asset.id === assetId),
     setVideoSchema,
     setSelectedElementKey,
     setSelectedTimelineTrack,
@@ -89,12 +90,41 @@ export function Editor({ slug }: EditorProps) {
     updateElementBounds,
     addTextTrack,
     addShapeTrack,
+    addAssetTrack,
     splitElementTrack,
     splitSelectedTimelineTrack,
     deleteSelectedTimelineTrack,
     clearSelectionFocus,
     updateSelectedTextElement,
   } = schemaActions;
+
+  const handleAddAssetToTimeline = useCallback((assetId: string) => {
+    addAssetTrack(assetId, playback.currentFrame);
+  }, [addAssetTrack, playback.currentFrame]);
+
+  const handleDropAssetToTimeline = useCallback((assetId: string, clientX: number, clientY: number) => {
+    const scrubRect = scrubZoneRef.current?.getBoundingClientRect();
+    const tracksRect = timelineTracksRef.current?.getBoundingClientRect();
+    if (!scrubRect || !tracksRect) {
+      addAssetTrack(assetId, playback.currentFrame);
+      return;
+    }
+
+    const scrubWidth = Math.max(scrubRect.width, 1);
+    const pointerX = Math.max(0, Math.min(scrubWidth, clientX - scrubRect.left));
+    const startFrame = Math.round((pointerX / scrubWidth) * playback.timelineFrameSpan);
+
+    const minSceneRows = derived.sceneTracks.length > 0 ? 2 : 0;
+    const maxSceneLane = derived.sceneTracks.reduce((maxLane, track) => Math.max(maxLane, track.lane), -1);
+    const sceneLaneCount = Math.max(maxSceneLane + 1, minSceneRows);
+    const rowHeight = 36;
+    const contentOffsetTop = 8;
+    const relativeY = Math.max(0, clientY - tracksRect.top - contentOffsetTop);
+    const absoluteLane = Math.max(0, Math.floor(relativeY / rowHeight));
+    const overlayLane = Math.max(0, absoluteLane - sceneLaneCount);
+
+    addAssetTrack(assetId, startFrame, overlayLane);
+  }, [addAssetTrack, derived.sceneTracks, playback.currentFrame, playback.timelineFrameSpan]);
 
   const interactions = useEditorInteractions({
     scrubZoneRef,
@@ -198,6 +228,7 @@ export function Editor({ slug }: EditorProps) {
           assets={ui.assets}
           assetUploadInputRef={ui.assetUploadInputRef}
           onAssetUpload={ui.handleAssetUpload}
+          onAddAssetToTimeline={handleAddAssetToTimeline}
         />
 
         <PreviewStage
@@ -281,6 +312,7 @@ export function Editor({ slug }: EditorProps) {
           setSelectedElementKey(`${sceneId}:${elementIndex}`);
         }}
         onSplitElementTrack={splitElementTrack}
+        onDropAssetToTimeline={handleDropAssetToTimeline}
         playheadLeftPx={playback.playheadLeftPx}
       />
     </div>

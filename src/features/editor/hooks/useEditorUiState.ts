@@ -75,6 +75,14 @@ export function useEditorUiState({ initialAssets }: UseEditorUiStateParams) {
           : file.type.startsWith("image/")
             ? "image"
             : "other";
+      const mediaLabel =
+        kind === "video"
+          ? "Video"
+          : kind === "image"
+            ? "Photo"
+            : kind === "audio"
+              ? "Audio"
+              : "File";
 
       return {
         id: `${Date.now()}-${index}-${file.name}`,
@@ -83,6 +91,7 @@ export function useEditorUiState({ initialAssets }: UseEditorUiStateParams) {
         src,
         revokeOnDispose: true,
         sizeLabel: formatFileSize(file.size),
+        mediaLabel,
       };
     });
 

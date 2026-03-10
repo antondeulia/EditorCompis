@@ -183,6 +183,7 @@ export function collectAssetsFromSchema(schema: VideoSchema): AssetItem[] {
         kind: element.kind,
         src: element.src,
         sizeLabel: element.kind === "video" ? "Video" : "Image",
+        mediaLabel: element.kind === "video" ? "Video" : "Photo",
       });
     }
   }

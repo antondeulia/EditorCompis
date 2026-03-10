@@ -461,9 +461,10 @@
 .assetsPanel {
   padding: 12px;
   display: grid;
-  gap: 12px;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
   align-content: start;
-  background: #f3f5f9;
+  background: linear-gradient(180deg, #f7f9fd 0%, #f0f4fb 100%);
   min-height: 0;
   overflow: auto;
 }
@@ -472,39 +473,118 @@
   display: none;
 }
 
+.assetsHeader {
+  display: grid;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 8px;
+  background: linear-gradient(180deg, #f7f9fd 20%, rgba(247, 249, 253, 0.8) 100%);
+  backdrop-filter: blur(4px);
+}
+
+.assetsHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.assetsTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #203451;
+}
+
+.assetsFilters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assetsFilter,
+.assetsFilterActive {
+  border: 0;
+  border-radius: 999px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5b6d86;
+  background: rgba(219, 228, 243, 0.86);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.assetsFilter span,
+.assetsFilterActive span {
+  min-width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.assetsFilterActive {
+  color: #ffffff;
+  background: linear-gradient(120deg, #2b66ff 0%, #4d8bff 100%);
+}
+
+.assetsFilterActive span {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .assetsUploadButton {
-  border: 1px solid var(--color-accent);
-  background: #ffffff;
-  color: var(--color-accent);
-  border-radius: 8px;
-  height: 34px;
+  border: 0;
+  background: linear-gradient(120deg, #151d2f 0%, #233458 100%);
+  color: #ffffff;
+  border-radius: 999px;
+  height: 30px;
+  padding: 0 12px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .assetsUploadButton:hover {
-  background: #f7f2ff;
+  filter: brightness(1.07);
 }
 
 .assetList {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 8px;
 }
 
 .assetCard {
-  border: 1px solid #d0d9e8;
+  border: 1px solid #d2deee;
   background: #ffffff;
-  border-radius: 9px;
-  padding: 10px;
+  border-radius: 12px;
+  padding: 8px;
   display: grid;
-  gap: 8px;
+  gap: 7px;
+  box-shadow: 0 8px 20px rgba(27, 46, 74, 0.05);
+}
+
+.assetCard:active {
+  cursor: grabbing;
+}
+
+.assetPreviewFrame {
+  position: relative;
 }
 
 .assetPreview {
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 7px;
+  border-radius: 9px;
   background: #111826;
   object-fit: cover;
 }
@@ -517,14 +597,37 @@
 .assetAudioPlaceholder,
 .assetFilePlaceholder {
   width: 100%;
-  height: 58px;
-  border-radius: 7px;
+  height: 68px;
+  border-radius: 9px;
   background: #eef2f8;
   display: grid;
   place-items: center;
   color: #5f6e84;
   font-size: 12px;
   font-weight: 600;
+}
+
+.assetKindBadge {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  border-radius: 999px;
+  height: 19px;
+  padding: 0 8px;
+  background: rgba(15, 25, 39, 0.64);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.assetMetaRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .assetMeta {
@@ -534,14 +637,39 @@
 
 .assetName {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 700;
   color: #2f4059;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .assetType {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 600;
   color: #7b8da8;
+}
+
+.assetAddButton {
+  border: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(120deg, #1f74ff 0%, #4fa8ff 100%);
+  color: #ffffff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.assetAddButton:hover {
+  filter: brightness(1.08);
 }
 
 .previewArea {
@@ -1309,6 +1437,22 @@
   display: grid;
   grid-auto-rows: 36px;
   padding: 0 var(--timeline-side-padding);
+}
+
+.tracksContentAssetDropTarget::after {
+  content: "Drop media to add track";
+  position: absolute;
+  inset: 10px 12px;
+  border: 2px dashed rgba(79, 124, 255, 0.75);
+  border-radius: 8px;
+  background: rgba(79, 124, 255, 0.12);
+  color: #2855a6;
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .timelineScrubber {

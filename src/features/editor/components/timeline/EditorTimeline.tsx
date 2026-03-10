@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, PointerEvent, RefObject } from "react";
+import { CSSProperties, DragEvent, PointerEvent, RefObject, useState } from "react";
 import { TimelineInspector } from "./TimelineInspector/TimelineInspector";
 import { TrackVisual } from "./TrackVisual";
 import { OverlayTrack, SelectedTimelineTrack, TrackVisualKind } from "../../model/types";
@@ -114,6 +114,7 @@ type EditorTimelineProps = {
   onSelectSceneTrack: (sceneId: string) => void;
   onSelectElementTrack: (sceneId: string, elementIndex: number) => void;
   onSplitElementTrack: (sceneId: string, elementIndex: number, frame: number) => void;
+  onDropAssetToTimeline: (assetId: string, clientX: number, clientY: number) => void;
   playheadLeftPx: number;
 };
 
@@ -150,9 +151,12 @@ export function EditorTimeline({
   onSelectSceneTrack,
   onSelectElementTrack,
   onSplitElementTrack,
+  onDropAssetToTimeline,
   playheadLeftPx,
 }: EditorTimelineProps) {
-  const minScenePlaceholderRows = 2;
+  const laneDragExpansion = 24;
+  const [isAssetDropTarget, setIsAssetDropTarget] = useState(false);
+  const minScenePlaceholderRows = sceneTracks.length > 0 ? 2 : 0;
   const minOverlayPlaceholderRows = 2;
   const timelineFrameSpan = Math.max(1, Math.round(fps * timelineDurationSeconds));
   const secondTicks: Array<{ frame: number; second: number; isMajor: boolean }> = [];
@@ -238,7 +242,36 @@ export function EditorTimeline({
             ))}
           </div>
           <div className={styles.tracks} ref={timelineTracksRef}>
-            <div className={styles.tracksContent} style={{ width: timelineContentWidth }}>
+            <div
+              className={`${styles.tracksContent} ${isAssetDropTarget ? styles.tracksContentAssetDropTarget : ""}`}
+              style={{ width: timelineContentWidth }}
+              onDragOver={(event: DragEvent<HTMLDivElement>) => {
+                if (!event.dataTransfer.types.includes("application/editor-asset-id")) {
+                  return;
+                }
+
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                if (!isAssetDropTarget) {
+                  setIsAssetDropTarget(true);
+                }
+              }}
+              onDragLeave={() => {
+                if (isAssetDropTarget) {
+                  setIsAssetDropTarget(false);
+                }
+              }}
+              onDrop={(event: DragEvent<HTMLDivElement>) => {
+                const assetId = event.dataTransfer.getData("application/editor-asset-id");
+                if (!assetId) {
+                  return;
+                }
+
+                event.preventDefault();
+                setIsAssetDropTarget(false);
+                onDropAssetToTimeline(assetId, event.clientX, event.clientY);
+              }}
+            >
               <input
                 type="range"
                 min={0}
@@ -280,7 +313,7 @@ export function EditorTimeline({
                               sceneId: track.id,
                               startFrame: track.startFrame,
                               startLane: track.lane,
-                              maxLane: Math.max(sceneLaneCount - 1, 0),
+                              maxLane: Math.max(sceneLaneCount - 1 + laneDragExpansion, 0),
                               startClientX: event.clientX,
                               startClientY: event.clientY,
                             })
@@ -381,7 +414,7 @@ export function EditorTimeline({
                               elementIndex: track.elementIndex,
                               startFrame: track.startFrame,
                               startLane: track.lane,
-                              maxLane: Math.max(overlayLaneCount - 1, 0),
+                              maxLane: Math.max(overlayLaneCount - 1 + laneDragExpansion, 0),
                               startClientX: event.clientX,
                               startClientY: event.clientY,
                             })

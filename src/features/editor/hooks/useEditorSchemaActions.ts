@@ -1,9 +1,10 @@
 "use client";
 
 import { Dispatch, SetStateAction, useCallback } from "react";
-import { editableOverlayKinds } from "../model/constants";
-import { SelectedTimelineTrack } from "../model/types";
-import { clamp, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
+import { editableOverlayKinds, timelineTrackableKinds } from "../model/constants";
+import { AssetItem, SelectedTimelineTrack } from "../model/types";
+import { clamp, getElementTimelineStart, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
+import { canAddAssetToTimeline, createElementFromAsset, getNextTimelineLane } from "../lib/asset-timeline";
 import { VideoElement, VideoSchema } from "../model/schema";
 
 type SelectedOverlayElement =
@@ -18,6 +19,7 @@ type Params = {
   currentFrame: number;
   selectedTimelineTrack: SelectedTimelineTrack | null;
   selectedOverlayElement: SelectedOverlayElement;
+  resolveAssetById: (assetId: string) => AssetItem | undefined;
   setVideoSchema: Dispatch<SetStateAction<VideoSchema>>;
   setSelectedElementKey: Dispatch<SetStateAction<string | null>>;
   setSelectedTimelineTrack: Dispatch<SetStateAction<SelectedTimelineTrack | null>>;
@@ -27,6 +29,7 @@ export function useEditorSchemaActions({
   currentFrame,
   selectedTimelineTrack,
   selectedOverlayElement,
+  resolveAssetById,
   setVideoSchema,
   setSelectedElementKey,
   setSelectedTimelineTrack,
@@ -254,6 +257,65 @@ export function useEditorSchemaActions({
     [currentFrame, ensureFallbackScene, setSelectedElementKey, setVideoSchema],
   );
 
+  const addAssetTrack = useCallback((assetId: string, requestedStartFrame?: number, requestedLane?: number) => {
+    const asset = resolveAssetById(assetId);
+    if (!asset || !canAddAssetToTimeline(asset)) {
+      return;
+    }
+
+    let nextSelected: SelectedTimelineTrack | null = null;
+
+    setVideoSchema((prev) => {
+      const safeSchema = ensureFallbackScene(prev);
+      const targetScene = safeSchema.scenes[0];
+      const startFrame = clamp(
+        Math.round(requestedStartFrame ?? currentFrame),
+        0,
+        Math.max(0, safeSchema.durationInFrames - 1),
+      );
+      const lane =
+        requestedLane === undefined
+          ? getNextTimelineLane(safeSchema, targetScene.id)
+          : Math.max(0, Math.round(requestedLane));
+      const createdElement = createElementFromAsset({
+        asset,
+        schema: safeSchema,
+        startFrame,
+        lane,
+      });
+
+      if (!createdElement) {
+        return prev;
+      }
+
+      return {
+        ...safeSchema,
+        scenes: safeSchema.scenes.map((scene) => {
+          if (scene.id !== targetScene.id) {
+            return scene;
+          }
+
+          const elementIndex = scene.elements.length;
+          nextSelected = {
+            kind: "element",
+            sceneId: scene.id,
+            elementIndex,
+          };
+
+          return {
+            ...scene,
+            elements: [...scene.elements, createdElement],
+          };
+        }),
+      };
+    });
+
+    if (nextSelected?.kind === "element") {
+      setSelectedTimelineTrack(nextSelected);
+      setSelectedElementKey(`${nextSelected.sceneId}:${nextSelected.elementIndex}`);
+    }
+  }, [currentFrame, ensureFallbackScene, resolveAssetById, setSelectedElementKey, setSelectedTimelineTrack, setVideoSchema]);
+
   const deleteSceneTrack = useCallback((sceneId: string) => {
     setVideoSchema((prev) => {
       if (!prev.scenes.some((scene) => scene.id === sceneId)) {
@@ -346,7 +408,7 @@ export function useEditorSchemaActions({
         }
 
         const targetElement = scene.elements[elementIndex];
-        if (!targetElement || !editableOverlayKinds.has(targetElement.kind)) {
+        if (!targetElement || !timelineTrackableKinds.has(targetElement.kind)) {
           return scene;
         }
 
@@ -456,6 +518,7 @@ export function useEditorSchemaActions({
     updateElementBounds,
     addTextTrack,
     addShapeTrack,
+    addAssetTrack,
     deleteSceneTrack,
     deleteElementTrack,
     splitElementTrack,

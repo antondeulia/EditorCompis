@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, PointerEvent, RefObject, SetStateAction, useCallback, useEffect, useState } from "react";
-import { editableOverlayKinds } from "../model/constants";
+import { editableOverlayKinds, timelineTrackableKinds } from "../model/constants";
 import { DragState, OverlayResizeState, SelectedTimelineTrack, TimelineDragState, TimelineTrimState } from "../model/types";
 import { getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
 import { VideoElement, VideoSchema } from "../model/schema";
@@ -266,7 +266,7 @@ export function useEditorInteractions({
         const nextScenes = prev.scenes.map((scene) => {
           let hasElementChange = false;
           const nextElements = scene.elements.map((element, index) => {
-            if (!editableOverlayKinds.has(element.kind)) {
+            if (!timelineTrackableKinds.has(element.kind)) {
               return element;
             }
 
@@ -479,7 +479,7 @@ export function useEditorInteractions({
 
           let hasElementChange = false;
           const nextElements = scene.elements.map((element, index) => {
-            if (index !== trim.elementIndex || !editableOverlayKinds.has(element.kind)) {
+            if (index !== trim.elementIndex || !timelineTrackableKinds.has(element.kind)) {
               return element;
             }
 

@@ -17,6 +17,7 @@ export const rightSidebarSections = ["Project", "AI Tools", "Properties", "Eleme
 export type RightSidebarSection = (typeof rightSidebarSections)[number];
 
 export const editableOverlayKinds = new Set<VideoElement["kind"]>(["text", "shape", "image"]);
+export const timelineTrackableKinds = new Set<VideoElement["kind"]>(["text", "shape", "image", "video"]);
 
 export const overlayResizeHandles = [
   { key: "n", directionX: 0 as const, directionY: -1 as const },

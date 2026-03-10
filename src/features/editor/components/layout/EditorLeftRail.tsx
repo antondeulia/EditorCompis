@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, PointerEvent, RefObject } from "react";
+import { AssetsPanel } from "../assets/AssetsPanel";
 import { AssetItem } from "../../model/types";
 import styles from "../../styles/editor.module.css";
 
@@ -15,6 +16,7 @@ type EditorLeftRailProps = {
   assets: AssetItem[];
   assetUploadInputRef: RefObject<HTMLInputElement | null>;
   onAssetUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onAddAssetToTimeline: (assetId: string) => void;
 };
 
 export function EditorLeftRail({
@@ -28,6 +30,7 @@ export function EditorLeftRail({
   assets,
   assetUploadInputRef,
   onAssetUpload,
+  onAddAssetToTimeline,
 }: EditorLeftRailProps) {
   return (
     <aside className={`${styles.leftRail} ${isCollapsed ? styles.leftRailCollapsed : ""}`}>
@@ -86,48 +89,12 @@ export function EditorLeftRail({
           </footer>
         </div>
       ) : (
-        <div className={styles.assetsPanel}>
-          <input
-            ref={assetUploadInputRef}
-            type="file"
-            accept="video/*,audio/*,image/*"
-            multiple
-            className={styles.assetsFileInput}
-            onChange={onAssetUpload}
-          />
-          <button type="button" className={styles.assetsUploadButton} onClick={() => assetUploadInputRef.current?.click()}>
-            Upload New Asset
-          </button>
-          <div className={styles.assetList}>
-            {assets.map((asset) => (
-              <article key={asset.id} className={styles.assetCard}>
-                {asset.kind === "video" && asset.src ? (
-                  <video className={styles.assetPreview} src={asset.src} controls preload="metadata" />
-                ) : null}
-                {asset.kind === "audio" && asset.src ? (
-                  <audio className={styles.assetAudio} src={asset.src} controls preload="metadata" />
-                ) : null}
-                {asset.kind === "image" && asset.src ? (
-                  <div
-                    className={styles.assetPreview}
-                    role="img"
-                    aria-label={asset.name}
-                    style={{ backgroundImage: `url("${asset.src}")`, backgroundSize: "cover", backgroundPosition: "center" }}
-                  />
-                ) : null}
-                {(asset.kind === "audio" && !asset.src) || asset.kind === "other" ? (
-                  <div className={styles.assetFilePlaceholder}>
-                    <span>File</span>
-                  </div>
-                ) : null}
-                <div className={styles.assetMeta}>
-                  <p className={styles.assetName}>{asset.name}</p>
-                  <p className={styles.assetType}>{asset.sizeLabel}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
+        <AssetsPanel
+          assets={assets}
+          assetUploadInputRef={assetUploadInputRef}
+          onAssetUpload={onAssetUpload}
+          onAddAssetToTimeline={onAddAssetToTimeline}
+        />
       )}
     </aside>
   );
