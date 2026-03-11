@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, PointerEvent, useState } from "react";
 import styles from "./PlaybackToolbar.module.css";
 
 type PlaybackToolbarProps = {
@@ -13,6 +13,8 @@ type PlaybackToolbarProps = {
   onForward: () => void;
   onSplitFocusedTrack: () => void;
   onRender: () => void;
+  isTimelineResizing: boolean;
+  onTimelineResizeStart: (event: PointerEvent<HTMLButtonElement>) => void;
 };
 
 const speedOptions = ["0.5x", "1x", "1.5x", "2x"];
@@ -137,6 +139,8 @@ export function PlaybackToolbar({
   onForward,
   onSplitFocusedTrack,
   onRender,
+  isTimelineResizing,
+  onTimelineResizeStart,
 }: PlaybackToolbarProps) {
   const [speed, setSpeed] = useState(speedOptions[1]);
 
@@ -150,6 +154,12 @@ export function PlaybackToolbar({
 
   return (
     <div className={styles.toolbar}>
+      <button
+        type="button"
+        className={`${styles.resizeHandle} ${isTimelineResizing ? styles.resizeHandleActive : ""}`}
+        onPointerDown={onTimelineResizeStart}
+        aria-label="Resize timeline height"
+      />
       <div className={styles.leftGroup}>
         <button
           type="button"

@@ -91,7 +91,6 @@ export function Editor({ slug }: EditorProps) {
     addTextTrack,
     addShapeTrack,
     addAssetTrack,
-    splitElementTrack,
     splitSelectedTimelineTrack,
     deleteSelectedTimelineTrack,
     clearSelectionFocus,
@@ -128,6 +127,7 @@ export function Editor({ slug }: EditorProps) {
 
   const interactions = useEditorInteractions({
     scrubZoneRef,
+    timelineTracksRef,
     timelineFrameSpan: playback.timelineFrameSpan,
     compositionViewportScale: playback.compositionViewport.scale,
     toCompositionCoordinates: playback.toCompositionCoordinates,
@@ -267,11 +267,11 @@ export function Editor({ slug }: EditorProps) {
         onForward={playback.forward}
         onSplitFocusedTrack={splitSelectedTimelineTrack}
         onRender={handleSaveProject}
+        isTimelineResizing={ui.isTimelineResizing}
+        onTimelineResizeStart={ui.handleTimelineResizeStart}
       />
 
       <EditorTimeline
-        isTimelineResizing={ui.isTimelineResizing}
-        onTimelineResizeStart={ui.handleTimelineResizeStart}
         isInspectorCollapsed={ui.isInspectorCollapsed}
         boundedInspectorWidth={ui.boundedInspectorWidth}
         currentTimeLabel={formatTime(playback.currentTime)}
@@ -293,7 +293,6 @@ export function Editor({ slug }: EditorProps) {
         selectedTimelineTrack={selectedTimelineTrack}
         selectedElementKey={selectedElementKey}
         fps={playback.fps}
-        currentFrame={playback.currentFrame}
         suppressTrackClickUntilRef={suppressTrackClickUntilRef}
         getSceneClipKindClassName={derived.getSceneClipKindClassName}
         getElementClipKindClassName={derived.getElementClipKindClassName}
@@ -311,7 +310,6 @@ export function Editor({ slug }: EditorProps) {
           });
           setSelectedElementKey(`${sceneId}:${elementIndex}`);
         }}
-        onSplitElementTrack={splitElementTrack}
         onDropAssetToTimeline={handleDropAssetToTimeline}
         playheadLeftPx={playback.playheadLeftPx}
       />

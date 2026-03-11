@@ -28,8 +28,6 @@ type InspectorRow = {
 };
 
 type EditorTimelineProps = {
-  isTimelineResizing: boolean;
-  onTimelineResizeStart: (event: PointerEvent<HTMLButtonElement>) => void;
   isInspectorCollapsed: boolean;
   boundedInspectorWidth: number;
   currentTimeLabel: string;
@@ -55,7 +53,6 @@ type EditorTimelineProps = {
   selectedTimelineTrack: SelectedTimelineTrack | null;
   selectedElementKey: string | null;
   fps: number;
-  currentFrame: number;
   suppressTrackClickUntilRef: RefObject<number>;
   getSceneClipKindClassName: (kind: TrackVisualKind) => string;
   getElementClipKindClassName: (kind: TrackVisualKind) => string;
@@ -113,14 +110,11 @@ type EditorTimelineProps = {
   ) => void;
   onSelectSceneTrack: (sceneId: string) => void;
   onSelectElementTrack: (sceneId: string, elementIndex: number) => void;
-  onSplitElementTrack: (sceneId: string, elementIndex: number, frame: number) => void;
   onDropAssetToTimeline: (assetId: string, clientX: number, clientY: number) => void;
   playheadLeftPx: number;
 };
 
 export function EditorTimeline({
-  isTimelineResizing,
-  onTimelineResizeStart,
   isInspectorCollapsed,
   boundedInspectorWidth,
   currentTimeLabel,
@@ -142,7 +136,6 @@ export function EditorTimeline({
   selectedTimelineTrack,
   selectedElementKey,
   fps,
-  currentFrame,
   suppressTrackClickUntilRef,
   getSceneClipKindClassName,
   getElementClipKindClassName,
@@ -150,7 +143,6 @@ export function EditorTimeline({
   onBeginTimelineClipTrim,
   onSelectSceneTrack,
   onSelectElementTrack,
-  onSplitElementTrack,
   onDropAssetToTimeline,
   playheadLeftPx,
 }: EditorTimelineProps) {
@@ -192,12 +184,6 @@ export function EditorTimeline({
 
   return (
     <section className={styles.timeline}>
-      <button
-        type="button"
-        className={`${styles.timelineResizeHandle} ${isTimelineResizing ? styles.timelineResizeHandleActive : ""}`}
-        onPointerDown={onTimelineResizeStart}
-        aria-label="Resize timeline height"
-      />
       <div
         className={styles.timelineBody}
         style={
@@ -394,7 +380,7 @@ export function EditorTimeline({
                       return (
                         <div
                           key={`element-${trackKey}`}
-                          className={`${styles.clip} ${styles.elementClip} ${getElementClipKindClassName(track.visualKind)} ${isSelected ? styles.elementClipSelected : ""} ${isSelected ? styles.clipHasSplitAction : ""}`}
+                          className={`${styles.clip} ${styles.elementClip} ${getElementClipKindClassName(track.visualKind)} ${isSelected ? styles.elementClipSelected : ""}`}
                           style={{
                             left: `${track.start}%`,
                             width: `${track.width}%`,
@@ -472,25 +458,6 @@ export function EditorTimeline({
                           <span className={styles.clipTitle}>
                             {track.elementKind}: {track.elementName} ({track.meta})
                           </span>
-                          {isSelected ? (
-                            <button
-                              type="button"
-                              className={styles.clipSplitButton}
-                              onPointerDown={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                              }}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                onSplitElementTrack(track.sceneId, track.elementIndex, currentFrame);
-                              }}
-                              aria-label={`Split ${track.elementKind} track at playhead`}
-                              title="Split at playhead"
-                            >
-                              split
-                            </button>
-                          ) : null}
                         </div>
                       );
                     })}

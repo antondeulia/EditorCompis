@@ -1,29 +1,13 @@
 "use client";
 
-import { Dispatch, SetStateAction, useCallback } from "react";
+import { useCallback } from "react";
 import { editableOverlayKinds, timelineTrackableKinds } from "../model/constants";
-import { AssetItem, SelectedTimelineTrack } from "../model/types";
+import { SelectedTimelineTrack } from "../model/types";
 import { clamp, getElementTimelineStart, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
 import { canAddAssetToTimeline, createElementFromAsset, getNextTimelineLane } from "../lib/asset-timeline";
-import { VideoElement, VideoSchema } from "../model/schema";
-
-type SelectedOverlayElement =
-  | {
-      sceneId: string;
-      elementIndex: number;
-      element: VideoElement;
-    }
-  | null;
-
-type Params = {
-  currentFrame: number;
-  selectedTimelineTrack: SelectedTimelineTrack | null;
-  selectedOverlayElement: SelectedOverlayElement;
-  resolveAssetById: (assetId: string) => AssetItem | undefined;
-  setVideoSchema: Dispatch<SetStateAction<VideoSchema>>;
-  setSelectedElementKey: Dispatch<SetStateAction<string | null>>;
-  setSelectedTimelineTrack: Dispatch<SetStateAction<SelectedTimelineTrack | null>>;
-};
+import { VideoElement } from "../model/schema";
+import { ensureFallbackScene } from "./editorSchemaActionUtils";
+import { UseEditorSchemaActionsParams } from "./useEditorSchemaActions.types";
 
 export function useEditorSchemaActions({
   currentFrame,
@@ -33,27 +17,7 @@ export function useEditorSchemaActions({
   setVideoSchema,
   setSelectedElementKey,
   setSelectedTimelineTrack,
-}: Params) {
-  const ensureFallbackScene = useCallback((schema: VideoSchema) => {
-    if (schema.scenes.length > 0) {
-      return schema;
-    }
-
-    return {
-      ...schema,
-      scenes: [
-        {
-          id: `scene-${Date.now().toString(36)}`,
-          name: "Scene",
-          startFrame: 0,
-          durationInFrames: Math.max(1, schema.durationInFrames),
-          backgroundColor: schema.backgroundColor,
-          elements: [],
-        },
-      ],
-    };
-  }, []);
-
+}: UseEditorSchemaActionsParams) {
   const updateElementPosition = useCallback(
     (sceneId: string, elementIndex: number, nextX: number, nextY: number) => {
       setVideoSchema((prev) => ({
@@ -205,7 +169,7 @@ export function useEditorSchemaActions({
     if (nextSelected) {
       setSelectedElementKey(nextSelected);
     }
-  }, [currentFrame, ensureFallbackScene, setSelectedElementKey, setVideoSchema]);
+  }, [currentFrame, setSelectedElementKey, setVideoSchema]);
 
   const addShapeTrack = useCallback(
     (shape: "rect" | "circle") => {
@@ -254,7 +218,7 @@ export function useEditorSchemaActions({
         setSelectedElementKey(nextSelected);
       }
     },
-    [currentFrame, ensureFallbackScene, setSelectedElementKey, setVideoSchema],
+    [currentFrame, setSelectedElementKey, setVideoSchema],
   );
 
   const addAssetTrack = useCallback((assetId: string, requestedStartFrame?: number, requestedLane?: number) => {
@@ -314,7 +278,7 @@ export function useEditorSchemaActions({
       setSelectedTimelineTrack(nextSelected);
       setSelectedElementKey(`${nextSelected.sceneId}:${nextSelected.elementIndex}`);
     }
-  }, [currentFrame, ensureFallbackScene, resolveAssetById, setSelectedElementKey, setSelectedTimelineTrack, setVideoSchema]);
+  }, [currentFrame, resolveAssetById, setSelectedElementKey, setSelectedTimelineTrack, setVideoSchema]);
 
   const deleteSceneTrack = useCallback((sceneId: string) => {
     setVideoSchema((prev) => {

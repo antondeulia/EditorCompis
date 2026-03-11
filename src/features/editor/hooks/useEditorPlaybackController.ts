@@ -13,8 +13,6 @@ import { PlayerRef } from "@remotion/player";
 import {
   maxTimelineZoom,
   minTimelineZoom,
-  timelineExtensionChunkSeconds,
-  timelineExtensionThresholdRatio,
   timelineScaleBase,
   timelineScaleSpan,
   transportSeekStep,
@@ -23,6 +21,10 @@ import {
 import { clamp } from "../lib/utils";
 import { VideoSchema } from "../model/schema";
 import { CompositionViewport } from "../model/types";
+import { buildTimelineRulerMarks, TimelineRulerMark } from "./buildTimelineRulerMarks";
+import { useTimelineWheelZoomHotkey } from "./useTimelineWheelZoomHotkey";
+import { useTimelineAutoExtend } from "./useTimelineAutoExtend";
+import { useTimelineScrubbingEffect } from "./useTimelineScrubbingEffect";
 
 type Params = {
   playerRef: RefObject<PlayerRef | null>;
@@ -32,19 +34,6 @@ type Params = {
   timelineTracksRef: RefObject<HTMLDivElement | null>;
   videoSchema: VideoSchema;
 };
-
-type TimelineRulerMark = {
-  frame: number;
-  timeSeconds: number;
-  label: string;
-};
-
-function formatTimelineRulerLabel(seconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(seconds));
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-}
 
 export function useEditorPlaybackController({
   playerRef,
@@ -56,6 +45,7 @@ export function useEditorPlaybackController({
 }: Params) {
   const pendingTimelineScrollLeftRef = useRef<number | null>(null);
   const timelineDetachedFromPlayerRef = useRef(false);
+  const previousDurationInFramesRef = useRef<number | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
@@ -63,6 +53,7 @@ export function useEditorPlaybackController({
   const [scrubPreviewProgress, setScrubPreviewProgress] = useState<number | null>(null);
   const [scrubPreviewLeftPx, setScrubPreviewLeftPx] = useState<number | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(38);
+  const [timelineAutoScaleCompensation, setTimelineAutoScaleCompensation] = useState(1);
   const [timelineExtraFrames, setTimelineExtraFrames] = useState(0);
   const [timelinePlayheadMetrics, setTimelinePlayheadMetrics] = useState({ offsetLeft: 0, width: 1 });
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
@@ -83,7 +74,8 @@ export function useEditorPlaybackController({
   const currentTime = currentFrame / fps;
   const progress = maxTimelineFrame > 0 ? clamp(currentFrame / maxTimelineFrame, 0, 1) : 0;
   const visiblePlayheadProgress = scrubPreviewProgress ?? progress;
-  const timelineZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
+  const timelineManualZoomScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
+  const timelineZoomScale = timelineManualZoomScale * timelineAutoScaleCompensation;
   const timelineSpanRatio = durationInFrames > 0 ? timelineFrameSpan / durationInFrames : 1;
   const timelineContentWidth = `${timelineZoomScale * timelineSpanRatio * 100}%`;
   const playheadLeftPx = clamp(
@@ -91,33 +83,10 @@ export function useEditorPlaybackController({
     timelinePlayheadMetrics.offsetLeft,
     timelinePlayheadMetrics.offsetLeft + timelinePlayheadMetrics.width,
   );
-  const timelineRulerMarks = useMemo<TimelineRulerMark[]>(() => {
-    if (timelineDurationSeconds <= 0) {
-      return [{ frame: 0, timeSeconds: 0, label: formatTimelineRulerLabel(0) }];
-    }
-
-    const majorStepSeconds = 5;
-    const marks: TimelineRulerMark[] = [];
-
-    for (let second = 0; second <= timelineDurationSeconds + 0.0001; second += majorStepSeconds) {
-      const frame = Math.min(Math.round(second * fps), Math.max(timelineFrameSpan - 1, 0));
-      marks.push({
-        frame,
-        timeSeconds: second,
-        label: formatTimelineRulerLabel(second),
-      });
-    }
-
-    if (marks.length === 0 || marks[marks.length - 1].frame !== Math.max(timelineFrameSpan - 1, 0)) {
-      marks.push({
-        frame: Math.max(timelineFrameSpan - 1, 0),
-        timeSeconds: timelineDurationSeconds,
-        label: formatTimelineRulerLabel(timelineDurationSeconds),
-      });
-    }
-
-    return marks;
-  }, [fps, timelineDurationSeconds, timelineFrameSpan]);
+  const timelineRulerMarks = useMemo<TimelineRulerMark[]>(
+    () => buildTimelineRulerMarks(fps, timelineDurationSeconds, timelineFrameSpan),
+    [fps, timelineDurationSeconds, timelineFrameSpan],
+  );
 
   const seekToFrame = useCallback(
     (nextFrame: number, options?: { allowTimelineOverflow?: boolean }) => {
@@ -209,24 +178,26 @@ export function useEditorPlaybackController({
 
       const rect = timelineElement.getBoundingClientRect();
       const mouseX = clamp(clientX - rect.left, 0, rect.width);
-      const minScale = timelineScaleBase + (minTimelineZoom / 100) * timelineScaleSpan;
-      const maxScale = timelineScaleBase + (maxTimelineZoom / 100) * timelineScaleSpan;
-      const oldScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
+      const minManualScale = timelineScaleBase + (minTimelineZoom / 100) * timelineScaleSpan;
+      const maxManualScale = timelineScaleBase + (maxTimelineZoom / 100) * timelineScaleSpan;
+      const oldManualScale = timelineScaleBase + (timelineZoom / 100) * timelineScaleSpan;
       const zoomFactor = Math.exp(-deltaY * wheelZoomStep);
-      const newScale = clamp(oldScale * zoomFactor, minScale, maxScale);
+      const newManualScale = clamp(oldManualScale * zoomFactor, minManualScale, maxManualScale);
+      const oldEffectiveScale = oldManualScale * timelineAutoScaleCompensation;
+      const newEffectiveScale = newManualScale * timelineAutoScaleCompensation;
 
-      if (Math.abs(newScale - oldScale) < 0.0001) {
+      if (Math.abs(newEffectiveScale - oldEffectiveScale) < 0.0001) {
         return;
       }
 
-      const timeUnderCursor = (timelineElement.scrollLeft + mouseX) / oldScale;
-      const nextScrollLeft = Math.max(0, timeUnderCursor * newScale - mouseX);
+      const timeUnderCursor = (timelineElement.scrollLeft + mouseX) / oldEffectiveScale;
+      const nextScrollLeft = Math.max(0, timeUnderCursor * newEffectiveScale - mouseX);
       pendingTimelineScrollLeftRef.current = nextScrollLeft;
 
-      const nextZoom = ((newScale - timelineScaleBase) / timelineScaleSpan) * 100;
+      const nextZoom = ((newManualScale - timelineScaleBase) / timelineScaleSpan) * 100;
       setTimelineZoom(clamp(nextZoom, minTimelineZoom, maxTimelineZoom));
     },
-    [timelineTracksRef, timelineZoom],
+    [timelineAutoScaleCompensation, timelineTracksRef, timelineZoom],
   );
 
   const recalcCompositionViewport = useCallback(() => {
@@ -339,6 +310,25 @@ export function useEditorPlaybackController({
   }, [playerRef]);
 
   useLayoutEffect(() => {
+    const previousDuration = previousDurationInFramesRef.current;
+    if (previousDuration === null || previousDuration <= 0) {
+      previousDurationInFramesRef.current = durationInFrames;
+      return;
+    }
+
+    if (previousDuration === durationInFrames) {
+      return;
+    }
+
+    // Compensate schema duration deltas without touching user zoom state,
+    // so dragging/releasing clips cannot cause visible zoom jumps.
+    setTimelineAutoScaleCompensation((prevCompensation) => {
+      return prevCompensation * (durationInFrames / previousDuration);
+    });
+    previousDurationInFramesRef.current = durationInFrames;
+  }, [durationInFrames]);
+
+  useLayoutEffect(() => {
     recalcCompositionViewport();
 
     const container = previewCanvasRef.current;
@@ -398,28 +388,11 @@ export function useEditorPlaybackController({
     };
   }, [scrubZoneRef, timelineMainRef, timelineTracksRef, timelineFrameSpan, timelineZoom]);
 
-  useEffect(() => {
-    const timelineElement = timelineTracksRef.current;
-    if (!timelineElement) {
-      return;
-    }
-
-    function handleNativeWheel(event: globalThis.WheelEvent) {
-      if (!event.ctrlKey) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      applyTimelineWheelZoom(event.deltaY, event.clientX);
-    }
-
-    timelineElement.addEventListener("wheel", handleNativeWheel, { passive: false });
-
-    return () => {
-      timelineElement.removeEventListener("wheel", handleNativeWheel);
-    };
-  }, [applyTimelineWheelZoom, timelineTracksRef]);
+  useTimelineWheelZoomHotkey({
+    timelineTracksRef,
+    isScrubbing,
+    applyTimelineWheelZoom,
+  });
 
   useLayoutEffect(() => {
     const timelineElement = timelineTracksRef.current;
@@ -434,60 +407,20 @@ export function useEditorPlaybackController({
     pendingTimelineScrollLeftRef.current = null;
   }, [timelineTracksRef, timelineZoom]);
 
-  useEffect(() => {
-    const timelineElement = timelineTracksRef.current;
-    if (!timelineElement) {
-      return;
-    }
+  useTimelineAutoExtend({
+    fps,
+    timelineFrameSpan,
+    timelineTracksRef,
+    setTimelineExtraFrames,
+  });
 
-    const chunkFrames = Math.max(Math.round(fps * timelineExtensionChunkSeconds), fps);
-
-    function maybeExtendTimeline() {
-      const remaining = timelineElement.scrollWidth - (timelineElement.scrollLeft + timelineElement.clientWidth);
-      const threshold = Math.max(timelineElement.clientWidth * timelineExtensionThresholdRatio, 120);
-
-      if (remaining > threshold) {
-        return;
-      }
-
-      setTimelineExtraFrames((prev) => prev + chunkFrames);
-    }
-
-    maybeExtendTimeline();
-    timelineElement.addEventListener("scroll", maybeExtendTimeline, { passive: true });
-    window.addEventListener("resize", maybeExtendTimeline);
-
-    return () => {
-      timelineElement.removeEventListener("scroll", maybeExtendTimeline);
-      window.removeEventListener("resize", maybeExtendTimeline);
-    };
-  }, [fps, timelineFrameSpan, timelineTracksRef]);
-
-  useEffect(() => {
-    if (!isScrubbing) {
-      return;
-    }
-
-    function handlePointerMove(event: globalThis.PointerEvent) {
-      seekFromClientX(event.clientX);
-    }
-
-    function stopScrub() {
-      setIsScrubbing(false);
-      setScrubPreviewProgress(null);
-      setScrubPreviewLeftPx(null);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopScrub);
-    window.addEventListener("pointercancel", stopScrub);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopScrub);
-      window.removeEventListener("pointercancel", stopScrub);
-    };
-  }, [isScrubbing, seekFromClientX]);
+  useTimelineScrubbingEffect({
+    isScrubbing,
+    seekFromClientX,
+    setIsScrubbing,
+    setScrubPreviewProgress,
+    setScrubPreviewLeftPx,
+  });
 
   return {
     isPlaying,

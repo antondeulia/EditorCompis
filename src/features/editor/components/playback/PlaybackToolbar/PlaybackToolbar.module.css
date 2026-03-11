@@ -1,5 +1,6 @@
 .toolbar {
   --color-accent: #7933ff;
+  position: relative;
   border-top: 1px solid #dbe3ef;
   background: #ffffff;
   display: grid;
@@ -9,6 +10,40 @@
   min-height: 52px;
   padding: 0 12px;
   margin-right: var(--right-sidebar-width, 0px);
+}
+
+.resizeHandle {
+  position: absolute;
+  top: -5px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: ns-resize;
+  z-index: 9;
+}
+
+.resizeHandle::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: 72px;
+  height: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(47, 64, 89, 0.28);
+}
+
+.resizeHandleActive::before,
+.resizeHandle:focus-visible::before {
+  background: var(--color-accent);
+}
+
+.resizeHandle:focus-visible {
+  outline: none;
 }
 
 .leftGroup {
