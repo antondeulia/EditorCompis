@@ -11,6 +11,11 @@ export type AssetItem = {
   name: string;
   kind: AssetKind;
   src?: string;
+  source?: "server" | "local";
+  mimeType?: string;
+  durationInSeconds?: number;
+  width?: number;
+  height?: number;
   sizeLabel: string;
   mediaLabel?: string;
   revokeOnDispose?: boolean;
@@ -25,12 +30,13 @@ export type CompositionViewport = {
 };
 
 export type OverlayTrack = {
+  trackType: "element" | "audio";
   sceneId: string;
   sceneName: string;
   elementId: string;
   elementIndex: number;
   lane: number;
-  elementKind: VideoElement["kind"];
+  elementKind: VideoElement["kind"] | "audio";
   elementName: string;
   startFrame: number;
   durationInFrames: number;
@@ -41,6 +47,7 @@ export type OverlayTrack = {
   meta: string;
   visualKind: TrackVisualKind;
   previewSrc?: string;
+  readonly?: boolean;
 };
 
 export type TrackVisualKind = "video" | "audio" | "text" | "shape" | "image";

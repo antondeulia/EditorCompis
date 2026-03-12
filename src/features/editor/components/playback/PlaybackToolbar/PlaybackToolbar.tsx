@@ -5,9 +5,11 @@ import styles from "./PlaybackToolbar.module.css";
 
 type PlaybackToolbarProps = {
   isPlaying: boolean;
+  isInspectorCollapsed: boolean;
   zoom: number;
   onZoomChange: (value: number) => void;
   onZoomStep: (delta: number) => void;
+  onToggleInspector: () => void;
   onTogglePlay: () => void;
   onRewind: () => void;
   onForward: () => void;
@@ -119,6 +121,15 @@ function IconSplit() {
   );
 }
 
+function IconTimelineInspector() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="10" rx="1.3" />
+      <path d="M6 3v10" />
+    </svg>
+  );
+}
+
 function IconRender() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -131,9 +142,11 @@ function IconRender() {
 
 export function PlaybackToolbar({
   isPlaying,
+  isInspectorCollapsed,
   zoom,
   onZoomChange,
   onZoomStep,
+  onToggleInspector,
   onTogglePlay,
   onRewind,
   onForward,
@@ -230,6 +243,15 @@ export function PlaybackToolbar({
           </div>
 
           <div className={styles.zoomGroup}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={onToggleInspector}
+              aria-label={isInspectorCollapsed ? "Show timeline track list" : "Hide timeline track list"}
+              title={isInspectorCollapsed ? "Show timeline track list" : "Hide timeline track list"}
+            >
+              <IconTimelineInspector />
+            </button>
             <button
               type="button"
               className={styles.iconButton}

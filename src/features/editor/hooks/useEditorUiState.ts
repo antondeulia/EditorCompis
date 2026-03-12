@@ -4,10 +4,44 @@ import { ChangeEvent, PointerEvent, useCallback, useEffect, useRef, useState } f
 import { defaultSidebarWidth, defaultTimelineHeight, RightSidebarSection } from "../model/constants";
 import { AssetItem, AssetKind } from "../model/types";
 import { clamp, formatFileSize } from "../lib/utils";
+import { extractMediaMetadata } from "../lib/media-metadata";
+import { uploadEditorAsset } from "../services/media-upload-gateway";
 
 type UseEditorUiStateParams = {
   initialAssets: AssetItem[];
 };
+
+function resolveAssetKindFromMimeType(mimeType: string): AssetKind {
+  if (mimeType.startsWith("video/")) {
+    return "video";
+  }
+
+  if (mimeType.startsWith("audio/")) {
+    return "audio";
+  }
+
+  if (mimeType.startsWith("image/")) {
+    return "image";
+  }
+
+  return "other";
+}
+
+function resolveMediaLabel(kind: AssetKind) {
+  if (kind === "video") {
+    return "Video";
+  }
+
+  if (kind === "image") {
+    return "Photo";
+  }
+
+  if (kind === "audio") {
+    return "Audio";
+  }
+
+  return "File";
+}
 
 export function useEditorUiState({ initialAssets }: UseEditorUiStateParams) {
   const assetUploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -59,41 +93,56 @@ export function useEditorUiState({ initialAssets }: UseEditorUiStateParams) {
     }, 2000);
   }, []);
 
-  const handleAssetUpload = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+  const handleAssetUpload = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
 
     if (!files || files.length === 0) {
       return;
     }
 
-    const nextAssets: AssetItem[] = Array.from(files).map((file, index) => {
+    const nextAssets = await Promise.all(Array.from(files).map(async (file, index): Promise<AssetItem> => {
       const src = URL.createObjectURL(file);
-      const kind: AssetKind = file.type.startsWith("video/")
-        ? "video"
-        : file.type.startsWith("audio/")
-          ? "audio"
-          : file.type.startsWith("image/")
-            ? "image"
-            : "other";
-      const mediaLabel =
-        kind === "video"
-          ? "Video"
-          : kind === "image"
-            ? "Photo"
-            : kind === "audio"
-              ? "Audio"
-              : "File";
-
-      return {
+      const localKind = resolveAssetKindFromMimeType(file.type);
+      const localMetadata = await extractMediaMetadata(file, src);
+      const localAsset: AssetItem = {
         id: `${Date.now()}-${index}-${file.name}`,
         name: file.name,
-        kind,
+        kind: localKind,
         src,
+        source: "local",
+        mimeType: file.type,
+        durationInSeconds: localMetadata.durationInSeconds,
+        width: localMetadata.width,
+        height: localMetadata.height,
         revokeOnDispose: true,
         sizeLabel: formatFileSize(file.size),
-        mediaLabel,
+        mediaLabel: resolveMediaLabel(localKind),
       };
-    });
+
+      try {
+        const uploaded = await uploadEditorAsset(file);
+        const serverMetadata = await extractMediaMetadata(file, uploaded.src);
+
+        URL.revokeObjectURL(src);
+
+        return {
+          id: uploaded.id,
+          name: uploaded.name,
+          kind: uploaded.kind,
+          src: uploaded.src,
+          source: "server",
+          mimeType: uploaded.mimeType,
+          durationInSeconds: serverMetadata.durationInSeconds ?? localMetadata.durationInSeconds,
+          width: serverMetadata.width ?? localMetadata.width,
+          height: serverMetadata.height ?? localMetadata.height,
+          revokeOnDispose: false,
+          sizeLabel: formatFileSize(uploaded.sizeBytes),
+          mediaLabel: resolveMediaLabel(uploaded.kind),
+        };
+      } catch {
+        return localAsset;
+      }
+    }));
 
     setAssets((prev) => [...nextAssets, ...prev]);
     event.target.value = "";

@@ -1,4 +1,62 @@
 export type EasingName = "linear" | "ease-in-out" | "ease-out";
+export type PlatformPreset =
+  | "youtube-16-9"
+  | "youtube-shorts-9-16"
+  | "tiktok-9-16"
+  | "instagram-reels-9-16"
+  | "instagram-feed-1-1"
+  | "facebook-16-9"
+  | "custom";
+
+export type ObjectFit = "cover" | "contain" | "fill";
+export type BlendMode = "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten";
+export type TransitionType =
+  | "cut"
+  | "fade"
+  | "dissolve"
+  | "wipe-left"
+  | "wipe-right"
+  | "slide-left"
+  | "slide-right"
+  | "zoom-in"
+  | "zoom-out"
+  | "blur";
+
+export type TimelineTransition = {
+  type: TransitionType;
+  durationInFrames: number;
+  easing?: EasingName;
+};
+
+export type SceneCameraKeyframe = {
+  frame: number;
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+  rotation?: number;
+  easing?: EasingName;
+};
+
+export type SceneEffect =
+  | { type: "blur"; amount: number }
+  | { type: "brightness"; value: number }
+  | { type: "contrast"; value: number }
+  | { type: "saturation"; value: number }
+  | { type: "hue-rotate"; degrees: number }
+  | { type: "vignette"; amount: number };
+
+export type AudioTrack = {
+  id: string;
+  kind: "voiceover" | "music" | "sfx";
+  src: string;
+  assetId?: string;
+  source?: "library" | "user-upload" | "generated";
+  startFrame: number;
+  durationInFrames: number;
+  volume?: number;
+  fadeInFrames?: number;
+  fadeOutFrames?: number;
+};
 
 export type ElementAnimation =
   | {
@@ -32,6 +90,30 @@ export type ElementAnimation =
       startFrame: number;
       durationInFrames: number;
       easing?: EasingName;
+    }
+  | {
+      type: "zoom-in";
+      from: number;
+      to: number;
+      startFrame: number;
+      durationInFrames: number;
+      easing?: EasingName;
+    }
+  | {
+      type: "zoom-out";
+      from: number;
+      to: number;
+      startFrame: number;
+      durationInFrames: number;
+      easing?: EasingName;
+    }
+  | {
+      type: "pan";
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      startFrame: number;
+      durationInFrames: number;
+      easing?: EasingName;
     };
 
 type BaseElement = {
@@ -49,8 +131,14 @@ type BaseElement = {
   opacity?: number;
   rotation?: number;
   scale?: number;
+  blendMode?: BlendMode;
+  objectFit?: ObjectFit;
+  transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
   zIndex?: number;
   animations?: ElementAnimation[];
+  effects?: SceneEffect[];
+  transitionIn?: TimelineTransition;
+  transitionOut?: TimelineTransition;
 };
 
 export type VideoElement =
@@ -77,12 +165,16 @@ export type VideoElement =
   | (BaseElement & {
       kind: "video";
       src: string;
-      objectFit?: "cover" | "contain";
+      assetId?: string;
+      source?: "library" | "user-upload" | "generated";
+      playbackRate?: number;
+      muted?: boolean;
     })
   | (BaseElement & {
       kind: "image";
       src: string;
-      objectFit?: "cover" | "contain";
+      assetId?: string;
+      source?: "library" | "user-upload" | "generated";
       borderRadius?: number;
     });
 
@@ -95,7 +187,25 @@ export type VideoScene = {
   timelineLane?: number;
   durationInFrames: number;
   backgroundColor?: string;
+  transitionIn?: TimelineTransition;
+  transitionOut?: TimelineTransition;
+  cameraKeyframes?: SceneCameraKeyframe[];
+  effects?: SceneEffect[];
+  audioTracks?: AudioTrack[];
   elements: VideoElement[];
+};
+
+export type VideoFormat = {
+  preset: PlatformPreset;
+  width: number;
+  height: number;
+  fps: number;
+  safeAreaInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 };
 
 export type VideoSchema = {
@@ -106,8 +216,33 @@ export type VideoSchema = {
   height: number;
   durationInFrames: number;
   backgroundColor: string;
+  format?: VideoFormat;
+  globalTransitions?: {
+    sceneDefaultIn?: TimelineTransition;
+    sceneDefaultOut?: TimelineTransition;
+  };
+  audioTracks?: AudioTrack[];
   scenes: VideoScene[];
 };
+
+export function createEmptyVideoSchema(): VideoSchema {
+  return {
+    id: `schema-${Date.now()}`,
+    title: "untitled-video",
+    fps: 30,
+    width: 1080,
+    height: 1920,
+    durationInFrames: 300,
+    backgroundColor: "#ffffff",
+    format: {
+      preset: "youtube-shorts-9-16",
+      width: 1080,
+      height: 1920,
+      fps: 30,
+    },
+    scenes: [],
+  };
+}
 
 export const demoVideoSchema: VideoSchema = {
   id: "schema-education-whiteboard",

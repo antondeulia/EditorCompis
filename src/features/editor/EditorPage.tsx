@@ -13,12 +13,85 @@ import { collectAssetsFromSchema, formatTime, getElementLabel, normalizeOverlayT
 import { useEditorSchemaActions } from "./hooks/useEditorSchemaActions";
 import { useEditorInteractions } from "./hooks/useEditorInteractions";
 import { localProjectGateway } from "./services/project-gateway";
+import { requestEditorChatReplyStream } from "./services/editor-chat-gateway";
+import { generateVideoSchema } from "./services/schema-generation-gateway";
 import { useEditorUiState } from "./hooks/useEditorUiState";
 import { demoVideoSchema, VideoSchema } from "./model/schema";
 import { useEditorDerivedState } from "./hooks/useEditorDerivedState";
 import { useEditorPlaybackController } from "./hooks/useEditorPlaybackController";
 import { useEditorKeyboardShortcuts } from "./hooks/useEditorKeyboardShortcuts";
 import styles from "./styles/editor.module.css";
+
+type ChatRole = "user" | "assistant";
+
+type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+  createdAt: string | null;
+};
+
+function createChatMessage(role: ChatRole, content: string): ChatMessage {
+  return {
+    id: `${role}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
+  {
+    id: "assistant-welcome",
+    role: "assistant",
+    content: "Hi! I am Compis assistant. Ask about ideas, scripts, timing, transitions, captions, or anything for your video.",
+    createdAt: null,
+  },
+];
+
+function isSchemaGenerationRequest(prompt: string) {
+  const token = prompt.trim().toLowerCase();
+  return (
+    token.startsWith("/schema ") ||
+    token === "generate schema" ||
+    token === "now generate it" ||
+    token === "generate it" ||
+    token.includes("сгенерируй схему")
+  );
+}
+
+function hasRenderableTimelineContent(schema: VideoSchema) {
+  if (!Number.isFinite(schema.fps) || schema.fps <= 0) {
+    return false;
+  }
+
+  const hasMasterAudio = (schema.audioTracks ?? []).some((track) => track.durationInFrames > 0);
+  if (hasMasterAudio) {
+    return true;
+  }
+
+  return schema.scenes.some((scene) => {
+    if (!Number.isFinite(scene.durationInFrames) || scene.durationInFrames <= 0) {
+      return false;
+    }
+
+    const hasSceneAudio = (scene.audioTracks ?? []).some((track) => track.durationInFrames > 0);
+    if (hasSceneAudio) {
+      return true;
+    }
+
+    return scene.elements.some((element) => {
+      if (!Number.isFinite(element.durationInFrames) || element.durationInFrames <= 0) {
+        return false;
+      }
+
+      return element.kind === "text"
+        || element.kind === "shape"
+        || element.kind === "image"
+        || element.kind === "video";
+    });
+  });
+}
 
 export function Editor({ slug }: EditorProps) {
   const playerRef = useRef<PlayerRef>(null);
@@ -39,6 +112,9 @@ export function Editor({ slug }: EditorProps) {
 
   const ui = useEditorUiState({ initialAssets });
   const [videoSchema, setVideoSchema] = useState<VideoSchema>(() => normalizeOverlayTimeline(demoVideoSchema));
+  const [chatPrompt, setChatPrompt] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
+  const [isChatLoading, setIsChatLoading] = useState(false);
   const [selectedTimelineTrack, setSelectedTimelineTrack] = useState<SelectedTimelineTrack | null>(null);
   const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
 
@@ -50,7 +126,12 @@ export function Editor({ slug }: EditorProps) {
         return;
       }
 
-      setVideoSchema(normalizeOverlayTimeline(snapshot.schema));
+      const normalizedDraft = normalizeOverlayTimeline(snapshot.schema);
+      if (!hasRenderableTimelineContent(normalizedDraft)) {
+        return;
+      }
+
+      setVideoSchema(normalizedDraft);
     });
 
     return () => {
@@ -96,10 +177,6 @@ export function Editor({ slug }: EditorProps) {
     clearSelectionFocus,
     updateSelectedTextElement,
   } = schemaActions;
-
-  const handleAddAssetToTimeline = useCallback((assetId: string) => {
-    addAssetTrack(assetId, playback.currentFrame);
-  }, [addAssetTrack, playback.currentFrame]);
 
   const handleDropAssetToTimeline = useCallback((assetId: string, clientX: number, clientY: number) => {
     const scrubRect = scrubZoneRef.current?.getBoundingClientRect();
@@ -155,6 +232,70 @@ export function Editor({ slug }: EditorProps) {
     playback.seekToFrame(0);
   };
 
+  const handleChatSubmit = useCallback(async () => {
+    const prompt = chatPrompt.trim();
+    if (!prompt || isChatLoading) {
+      return;
+    }
+
+    const userMessage = createChatMessage("user", prompt);
+    const nextHistory = [...chatMessages, userMessage].map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+
+    setChatMessages((prev) => [...prev, userMessage]);
+    setChatPrompt("");
+    setIsChatLoading(true);
+
+    try {
+      if (isSchemaGenerationRequest(prompt)) {
+        const schemaPrompt = prompt.startsWith("/schema")
+          ? prompt.replace(/^\/schema\s*/i, "").trim()
+          : prompt;
+        const data = await generateVideoSchema(
+          schemaPrompt.length > 0 ? schemaPrompt : "Generate video schema based on recent chat context",
+          videoSchema,
+        );
+        const normalizedSchema = normalizeOverlayTimeline(data.schema);
+        setVideoSchema(normalizedSchema);
+        setSelectedElementKey(null);
+        setSelectedTimelineTrack(null);
+        playback.seekToFrame(0);
+        setChatMessages((prev) => [...prev, createChatMessage("assistant", "Schema generated and applied to preview.")]);
+        return;
+      }
+
+      const assistantMessageId = `assistant-stream-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: assistantMessageId,
+          role: "assistant",
+          content: "",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+
+      await requestEditorChatReplyStream({
+        message: prompt,
+        history: nextHistory,
+        onToken: (token) => {
+          setChatMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantMessageId ? { ...message, content: `${message.content}${token}` } : message,
+            ),
+          );
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setChatMessages((prev) => [...prev, createChatMessage("assistant", `Error: ${message}`)]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  }, [chatMessages, chatPrompt, isChatLoading, playback, videoSchema]);
+
   return (
     <div
       className={styles.editorShell}
@@ -162,6 +303,7 @@ export function Editor({ slug }: EditorProps) {
         {
           "--timeline-height": `${ui.timelineHeight}px`,
           "--right-sidebar-panel-width": ui.isRightSidebarPanelOpen ? "340px" : "0px",
+          "--left-rail-visible-width": ui.isLeftRailCollapsed ? "0px" : `${ui.leftRailWidth}px`,
         } as CSSProperties
       }
       onPointerDownCapture={(event) => {
@@ -210,25 +352,18 @@ export function Editor({ slug }: EditorProps) {
 
       <div
         className={styles.workspace}
-        style={
-          {
-            "--left-rail-width": ui.isLeftRailCollapsed ? "0px" : `${ui.leftRailWidth}px`,
-            "--left-rail-min": ui.isLeftRailCollapsed ? "0px" : "250px",
-          } as CSSProperties
-        }
       >
         <EditorLeftRail
           isCollapsed={ui.isLeftRailCollapsed}
           isResizing={ui.isLeftRailResizing}
           onResizeStart={ui.handleLeftRailResizeStart}
-          activeTab={ui.activeLeftTab}
-          onTabChange={ui.setActiveLeftTab}
           isChatScrollbarVisible={ui.isChatScrollbarVisible}
           onChatScroll={ui.handleChatScroll}
-          assets={ui.assets}
-          assetUploadInputRef={ui.assetUploadInputRef}
-          onAssetUpload={ui.handleAssetUpload}
-          onAddAssetToTimeline={handleAddAssetToTimeline}
+          chatMessages={chatMessages}
+          chatPrompt={chatPrompt}
+          onChatPromptChange={setChatPrompt}
+          onChatSubmit={handleChatSubmit}
+          isChatLoading={isChatLoading}
         />
 
         <PreviewStage
@@ -259,9 +394,11 @@ export function Editor({ slug }: EditorProps) {
 
       <PlaybackToolbar
         isPlaying={playback.isPlaying}
+        isInspectorCollapsed={ui.isInspectorCollapsed}
         zoom={playback.timelineZoom}
         onZoomChange={playback.handleTimelineZoomChange}
         onZoomStep={playback.adjustTimelineZoom}
+        onToggleInspector={ui.toggleInspector}
         onTogglePlay={playback.togglePlay}
         onRewind={playback.rewind}
         onForward={playback.forward}

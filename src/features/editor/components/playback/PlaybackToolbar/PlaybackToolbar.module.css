@@ -9,6 +9,7 @@
   gap: 12px;
   min-height: 52px;
   padding: 0 12px;
+  margin-left: var(--left-rail-visible-width, 0px);
   margin-right: var(--right-sidebar-width, 0px);
 }
 
@@ -26,20 +27,12 @@
 }
 
 .resizeHandle::before {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 50%;
-  width: 72px;
-  height: 2px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: rgba(47, 64, 89, 0.28);
+  content: none;
 }
 
 .resizeHandleActive::before,
 .resizeHandle:focus-visible::before {
-  background: var(--color-accent);
+  content: none;
 }
 
 .resizeHandle:focus-visible {
@@ -235,6 +228,7 @@
     grid-template-columns: 1fr;
     padding: 8px;
     gap: 8px;
+    margin-left: 0;
   }
 
   .leftGroup,

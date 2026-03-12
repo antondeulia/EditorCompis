@@ -17,6 +17,15 @@ function getDefaultMediaDuration(schema: VideoSchema, startFrame: number) {
   return Math.max(30, Math.min(150, maxDuration));
 }
 
+function resolveAssetDurationInFrames(asset: AssetItem, schema: VideoSchema, startFrame: number) {
+  const fromMetadata =
+    typeof asset.durationInSeconds === "number" && Number.isFinite(asset.durationInSeconds)
+      ? Math.round(asset.durationInSeconds * schema.fps)
+      : null;
+  const preferred = fromMetadata !== null ? Math.max(1, fromMetadata) : getDefaultMediaDuration(schema, startFrame);
+  return Math.max(1, Math.min(preferred, schema.durationInFrames - startFrame));
+}
+
 export function canAddAssetToTimeline(asset: AssetItem) {
   return asset.kind === "video" || asset.kind === "image";
 }
@@ -36,11 +45,13 @@ export function createElementFromAsset({
       id: makeElementId("video"),
       kind: "video",
       src: asset.src,
+      assetId: asset.id,
+      source: asset.source === "server" ? "user-upload" : "library",
       objectFit: "cover",
       startFrame: 0,
       timelineStartFrame: startFrame,
       timelineLane: lane,
-      durationInFrames: getDefaultMediaDuration(schema, startFrame),
+      durationInFrames: resolveAssetDurationInFrames(asset, schema, startFrame),
       x: 0,
       y: 0,
       width: schema.width,
@@ -52,6 +63,8 @@ export function createElementFromAsset({
     id: makeElementId("image"),
     kind: "image",
     src: asset.src,
+    assetId: asset.id,
+    source: asset.source === "server" ? "user-upload" : "library",
     objectFit: "cover",
     startFrame: 0,
     timelineStartFrame: startFrame,

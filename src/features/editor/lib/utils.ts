@@ -154,7 +154,7 @@ export function getRenderedElementPosition(element: VideoElement, localFrame: nu
   let y = element.y;
 
   for (const animation of element.animations ?? []) {
-    if (animation.type !== "move") {
+    if (animation.type !== "move" && animation.type !== "pan") {
       continue;
     }
 
@@ -184,6 +184,30 @@ export function collectAssetsFromSchema(schema: VideoSchema): AssetItem[] {
         src: element.src,
         sizeLabel: element.kind === "video" ? "Video" : "Image",
         mediaLabel: element.kind === "video" ? "Video" : "Photo",
+      });
+    }
+  }
+
+  for (const track of schema.audioTracks ?? []) {
+    assets.push({
+      id: `master-audio-${track.id}`,
+      name: track.src.split("/").pop() ?? track.id,
+      kind: "audio",
+      src: track.src,
+      sizeLabel: "Audio",
+      mediaLabel: "Audio",
+    });
+  }
+
+  for (const scene of schema.scenes) {
+    for (const track of scene.audioTracks ?? []) {
+      assets.push({
+        id: `${scene.id}-audio-${track.id}`,
+        name: track.src.split("/").pop() ?? track.id,
+        kind: "audio",
+        src: track.src,
+        sizeLabel: "Audio",
+        mediaLabel: "Audio",
       });
     }
   }
@@ -292,8 +316,35 @@ export function isTypingTarget(target: EventTarget | null) {
     return false;
   }
 
+  if (target.isContentEditable) {
+    return true;
+  }
+
   const tagName = target.tagName;
-  return target.isContentEditable || tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+  if (tagName === "TEXTAREA" || tagName === "SELECT") {
+    return true;
+  }
+
+  if (tagName !== "INPUT") {
+    return false;
+  }
+
+  const input = target as HTMLInputElement;
+  const typingInputTypes = new Set([
+    "text",
+    "search",
+    "email",
+    "password",
+    "url",
+    "tel",
+    "number",
+    "date",
+    "datetime-local",
+    "month",
+    "time",
+    "week",
+  ]);
+  return typingInputTypes.has(input.type);
 }
 
 

@@ -77,7 +77,7 @@ export function PreviewStage({
                 height: "100%",
                 borderRadius: 12,
                 overflow: "hidden",
-                background: "#000000",
+                background: "transparent",
               }}
               clickToPlay={false}
             />

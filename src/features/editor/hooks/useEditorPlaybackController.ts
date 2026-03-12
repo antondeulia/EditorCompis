@@ -65,8 +65,41 @@ export function useEditorPlaybackController({
     scale: 1,
   });
 
-  const durationInFrames = videoSchema.durationInFrames;
-  const fps = videoSchema.fps;
+  const fps = useMemo(() => {
+    if (Number.isFinite(videoSchema.fps) && videoSchema.fps > 0) {
+      return Math.round(videoSchema.fps);
+    }
+
+    return 30;
+  }, [videoSchema.fps]);
+
+  const inferredDurationInFrames = useMemo(() => {
+    const sceneMax = (videoSchema.scenes ?? []).reduce((maxFrame, scene) => {
+      const start = Number.isFinite(scene.startFrame) ? Math.max(0, Math.round(scene.startFrame)) : 0;
+      const duration = Number.isFinite(scene.durationInFrames) ? Math.max(0, Math.round(scene.durationInFrames)) : 0;
+      return Math.max(maxFrame, start + duration);
+    }, 0);
+
+    const masterAudioMax = (videoSchema.audioTracks ?? []).reduce((maxFrame, track) => {
+      const start = Number.isFinite(track.startFrame) ? Math.max(0, Math.round(track.startFrame)) : 0;
+      const duration = Number.isFinite(track.durationInFrames) ? Math.max(0, Math.round(track.durationInFrames)) : 0;
+      return Math.max(maxFrame, start + duration);
+    }, 0);
+
+    return Math.max(sceneMax, masterAudioMax);
+  }, [videoSchema.audioTracks, videoSchema.scenes]);
+
+  const durationInFrames = useMemo(() => {
+    if (Number.isFinite(videoSchema.durationInFrames) && videoSchema.durationInFrames > 0) {
+      return Math.round(videoSchema.durationInFrames);
+    }
+
+    if (inferredDurationInFrames > 0) {
+      return inferredDurationInFrames;
+    }
+
+    return fps * 5;
+  }, [fps, inferredDurationInFrames, videoSchema.durationInFrames]);
   const baseTimelineFrameSpan = useMemo(() => durationInFrames, [durationInFrames]);
   const timelineFrameSpan = baseTimelineFrameSpan + timelineExtraFrames;
   const maxTimelineFrame = Math.max(timelineFrameSpan - 1, 0);
@@ -219,15 +252,17 @@ export function useEditorPlaybackController({
       fittedWidth = height * aspect;
     }
 
-    const offsetX = (width - fittedWidth) / 2;
-    const offsetY = (height - fittedHeight) / 2;
+    const roundedWidth = Math.round(fittedWidth);
+    const roundedHeight = Math.round(fittedHeight);
+    const offsetX = Math.round((width - roundedWidth) / 2);
+    const offsetY = Math.round((height - roundedHeight) / 2);
 
     setCompositionViewport({
       left: offsetX,
       top: offsetY,
-      width: fittedWidth,
-      height: fittedHeight,
-      scale: fittedWidth / videoSchema.width,
+      width: roundedWidth,
+      height: roundedHeight,
+      scale: roundedWidth / videoSchema.width,
     });
   }, [previewCanvasRef, videoSchema.height, videoSchema.width]);
 

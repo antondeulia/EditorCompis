@@ -50,6 +50,22 @@ type Params = {
   selectedElementKey: string | null;
 };
 
+function toSafeNonNegativeInt(value: number | undefined, fallback: number) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.round(value));
+}
+
+function toSafePositiveInt(value: number | undefined, fallback: number) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.round(value));
+}
+
 export function useEditorDerivedState({
   videoSchema,
   fps,
@@ -99,30 +115,41 @@ export function useEditorDerivedState({
     const tracks = videoSchema.scenes.flatMap((scene, sceneIndex) => {
       const primaryElement =
         scene.elements.find((element) => !isTimelineOverlayElement(element))
-        ?? getScenePrimaryElement(scene);
-      if (!primaryElement || isTimelineOverlayElement(primaryElement)) {
-        return [];
-      }
+        ?? getScenePrimaryElement(scene)
+        ?? scene.elements[0];
       const visualKind: TrackVisualKind =
         primaryElement?.kind === "video" || primaryElement?.kind === "image"
           ? primaryElement.kind
           : primaryElement?.kind === "text"
             ? "text"
-            : "shape";
+            : primaryElement?.kind === "shape"
+              ? "shape"
+              : "video";
       const previewSrc =
         primaryElement?.kind === "video" || primaryElement?.kind === "image" ? primaryElement.src : undefined;
+      const lane = toSafeNonNegativeInt(scene.timelineLane, sceneIndex);
+      const startFrame = toSafeNonNegativeInt(scene.startFrame, 0);
+      const durationInFrames = toSafePositiveInt(scene.durationInFrames, fps);
+      const trimStartFrames = toSafeNonNegativeInt(scene.timelineTrimStartFrames, 0);
+      const trimEndFrames = toSafeNonNegativeInt(scene.timelineTrimEndFrames, 0);
 
       return [{
         id: scene.id,
         name: scene.name,
-        lane: scene.timelineLane ?? sceneIndex,
-        startFrame: scene.startFrame,
-        durationInFrames: scene.durationInFrames,
-        trimStartFrames: Math.max(0, scene.timelineTrimStartFrames ?? 0),
-        trimEndFrames: Math.max(0, scene.timelineTrimEndFrames ?? 0),
-        start: (scene.startFrame / timelineFrameSpan) * 100,
-        width: (scene.durationInFrames / timelineFrameSpan) * 100,
-        meta: `${(scene.durationInFrames / fps).toFixed(1)}s`,
+        lane,
+        startFrame,
+        durationInFrames,
+        trimStartFrames,
+        trimEndFrames,
+        start: (startFrame / timelineFrameSpan) * 100,
+        width: (durationInFrames / timelineFrameSpan) * 100,
+        meta: [
+          `${(durationInFrames / fps).toFixed(1)}s`,
+          scene.transitionIn || scene.transitionOut ? "transition" : null,
+          scene.cameraKeyframes?.length ? `camera:${scene.cameraKeyframes.length}` : null,
+          scene.effects?.length ? `effects:${scene.effects.length}` : null,
+          scene.audioTracks?.length ? `audio:${scene.audioTracks.length}` : null,
+        ].filter(Boolean).join(" • "),
         visualKind,
         previewSrc,
       }];
@@ -149,20 +176,26 @@ export function useEditorDerivedState({
           undefined,
           { constrainToScene: false },
         );
+        if (!Number.isFinite(timelineRange.startFrame) || !Number.isFinite(timelineRange.durationInFrames)) {
+          return;
+        }
+
         if (timelineRange.durationInFrames <= 0) {
           return;
         }
 
-        const globalStartFrame = timelineRange.startFrame;
-        const globalDuration = timelineRange.durationInFrames;
-        const trimStartFrames = Math.max(0, element.timelineTrimStartFrames ?? 0);
-        const trimEndFrames = Math.max(0, element.timelineTrimEndFrames ?? 0);
+        const globalStartFrame = toSafeNonNegativeInt(timelineRange.startFrame, 0);
+        const globalDuration = toSafePositiveInt(timelineRange.durationInFrames, fps);
+        const trimStartFrames = toSafeNonNegativeInt(element.timelineTrimStartFrames, 0);
+        const trimEndFrames = toSafeNonNegativeInt(element.timelineTrimEndFrames, 0);
+        const lane = toSafeNonNegativeInt(element.timelineLane, fallbackLane);
         tracks.push({
+          trackType: "element",
           sceneId: scene.id,
           sceneName: scene.name,
           elementId: element.id,
           elementIndex,
-          lane: element.timelineLane ?? fallbackLane,
+          lane,
           elementKind: element.kind,
           elementName: getElementLabel(element),
           startFrame: globalStartFrame,
@@ -182,6 +215,58 @@ export function useEditorDerivedState({
         });
         fallbackLane += 1;
       });
+
+      for (const track of scene.audioTracks ?? []) {
+        const startFrame = Math.max(0, scene.startFrame + track.startFrame);
+        const durationInFrames = Math.max(1, track.durationInFrames);
+        tracks.push({
+          trackType: "audio",
+          sceneId: scene.id,
+          sceneName: scene.name,
+          elementId: track.id,
+          elementIndex: -1,
+          lane: fallbackLane,
+          elementKind: "audio",
+          elementName: track.src.split("/").pop() ?? track.id,
+          startFrame,
+          durationInFrames,
+          trimStartFrames: 0,
+          trimEndFrames: 0,
+          start: (startFrame / timelineFrameSpan) * 100,
+          width: (durationInFrames / timelineFrameSpan) * 100,
+          meta: `${(durationInFrames / fps).toFixed(1)}s • ${track.kind}`,
+          visualKind: "audio",
+          previewSrc: track.src,
+          readonly: true,
+        });
+        fallbackLane += 1;
+      }
+    }
+
+    for (const track of videoSchema.audioTracks ?? []) {
+      const startFrame = toSafeNonNegativeInt(track.startFrame, 0);
+      const durationInFrames = toSafePositiveInt(track.durationInFrames, fps);
+      tracks.push({
+        trackType: "audio",
+        sceneId: "__master__",
+        sceneName: "Master",
+        elementId: track.id,
+        elementIndex: -1,
+        lane: fallbackLane,
+        elementKind: "audio",
+        elementName: track.src.split("/").pop() ?? track.id,
+        startFrame,
+        durationInFrames,
+        trimStartFrames: 0,
+        trimEndFrames: 0,
+        start: (startFrame / timelineFrameSpan) * 100,
+        width: (durationInFrames / timelineFrameSpan) * 100,
+        meta: `${(durationInFrames / fps).toFixed(1)}s • ${track.kind}`,
+        visualKind: "audio",
+        previewSrc: track.src,
+        readonly: true,
+      });
+      fallbackLane += 1;
     }
 
     tracks.sort(
@@ -192,7 +277,7 @@ export function useEditorDerivedState({
         || a.elementIndex - b.elementIndex,
     );
     return tracks;
-  }, [fps, isTimelineOverlayElement, timelineFrameSpan, videoSchema.scenes]);
+  }, [fps, isTimelineOverlayElement, timelineFrameSpan, videoSchema.audioTracks, videoSchema.scenes]);
 
   const activeOverlayElements = useMemo<ActiveOverlayElement[]>(() => {
     const overlays: ActiveOverlayElement[] = [];
@@ -266,7 +351,7 @@ export function useEditorDerivedState({
         meta: `${scene.name} - ${(scene.durationInFrames / fps).toFixed(1)}s`,
       })),
       ...overlayTracks.map((track) => ({
-        id: `${track.sceneId}:${track.elementIndex}`,
+        id: track.trackType === "audio" ? `${track.sceneId}:audio:${track.elementId}` : `${track.sceneId}:${track.elementIndex}`,
         label: `<${track.elementKind}>`,
         meta: `${track.sceneName} / ${track.elementName}`,
       })),
