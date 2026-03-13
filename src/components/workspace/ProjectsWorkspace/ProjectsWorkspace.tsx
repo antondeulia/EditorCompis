@@ -7,38 +7,68 @@ import { NewProjectModal } from "@/components/modals/NewProjectModal";
 import { NewVideoModal } from "@/components/modals/NewVideoModal";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { VideoCard } from "@/components/projects/VideoCard";
-import { createProjectMock, createVideoMock } from "@/data/mocks/projects.mock-api";
-import { CreateProjectInput, CreateVideoInput, Project } from "@/data/mocks/projects.mock";
+import { localProjectLibraryGateway } from "@/data/projects.local";
+import { CreateProjectInput, CreateVideoInput, Project } from "@/data/projects";
 import styles from "./ProjectsWorkspace.module.css";
 
 type ProjectsWorkspaceProps = {
-  initialProjects: Project[];
   selectedProjectId?: string;
 };
 
 export function ProjectsWorkspace({
-  initialProjects,
   selectedProjectId,
 }: ProjectsWorkspaceProps) {
-  const tabItems = [
-    { label: "All", count: 87 },
-    { label: "Current", count: 6, active: true },
-    { label: "Pending", count: 2 },
-    { label: "Completed", count: 79 },
-    { label: "Failed" },
-  ];
-
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId),
     [projects, selectedProjectId],
   );
   const isProjectView = Boolean(selectedProject);
+  const totalVideoCount = useMemo(
+    () => projects.reduce((sum, project) => sum + project.videos.length, 0),
+    [projects],
+  );
+  const publishedVideoCount = useMemo(
+    () =>
+      projects.reduce(
+        (sum, project) => sum + project.videos.filter((video) => video.status === "published").length,
+        0,
+      ),
+    [projects],
+  );
+  const draftVideoCount = totalVideoCount - publishedVideoCount;
+  const tabItems = useMemo(
+    () => [
+      { label: "Projects", count: projects.length, active: !isProjectView },
+      { label: "Videos", count: totalVideoCount, active: isProjectView },
+      { label: "Published", count: publishedVideoCount },
+      { label: "Drafts", count: draftVideoCount },
+    ],
+    [draftVideoCount, isProjectView, projects.length, publishedVideoCount, totalVideoCount],
+  );
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void localProjectLibraryGateway.listProjects().then((storedProjects) => {
+      if (isCancelled) {
+        return;
+      }
+
+      setProjects(storedProjects);
+      setIsHydrated(true);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   async function handleCreateProject(payload: CreateProjectInput) {
-    const created = await createProjectMock(payload);
+    const created = await localProjectLibraryGateway.createProject(payload);
     setProjects((currentProjects) => [created, ...currentProjects]);
   }
 
@@ -47,13 +77,9 @@ export function ProjectsWorkspace({
       return;
     }
 
-    const createdVideo = await createVideoMock(payload);
+    const updatedProject = await localProjectLibraryGateway.createVideo(selectedProjectId, payload);
     setProjects((currentProjects) =>
-      currentProjects.map((project) =>
-        project.id === selectedProjectId
-          ? { ...project, videos: [createdVideo, ...project.videos] }
-          : project,
-      ),
+      currentProjects.map((project) => (project.id === selectedProjectId ? updatedProject : project)),
     );
   }
 
@@ -65,6 +91,8 @@ export function ProjectsWorkspace({
 
     setIsModalOpen(true);
   }, [selectedProject]);
+
+  const isEmptyState = isHydrated && projects.length === 0;
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -172,15 +200,23 @@ export function ProjectsWorkspace({
 
       {!selectedProject ? (
         <section className={styles.grid}>
-          {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
+          {isEmptyState ? (
+            <p className={styles.projectDescription}>Create your first project to start building videos.</p>
+          ) : (
+            projects.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))
+          )}
         </section>
       ) : (
         <section className={styles.videoGrid}>
-          {selectedProject.videos.map((video) => (
-            <VideoCard key={video.id} video={video} />
-          ))}
+          {selectedProject.videos.length === 0 ? (
+            <p className={styles.projectDescription}>This project does not contain videos yet.</p>
+          ) : (
+            selectedProject.videos.map((video) => (
+              <VideoCard key={video.id} video={video} />
+            ))
+          )}
         </section>
       )}
       <div className={styles.floatingAddButtonWrap}>

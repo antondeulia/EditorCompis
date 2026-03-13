@@ -2,9 +2,8 @@
 
 import { useCallback } from "react";
 import { editableOverlayKinds, timelineTrackableKinds } from "../model/constants";
-import { SelectedTimelineTrack } from "../model/types";
 import { clamp, getElementTimelineStart, getTextMinimumHeightForWidth, getTextMinimumWidth } from "../lib/utils";
-import { canAddAssetToTimeline, createElementFromAsset, getNextTimelineLane } from "../lib/asset-timeline";
+import { canAddAssetToTimeline, createAudioTrackFromAsset, createElementFromAsset, getNextTimelineLane } from "../lib/asset-timeline";
 import { VideoElement } from "../model/schema";
 import { ensureFallbackScene } from "./editorSchemaActionUtils";
 import { UseEditorSchemaActionsParams } from "./useEditorSchemaActions.types";
@@ -227,16 +226,36 @@ export function useEditorSchemaActions({
       return;
     }
 
-    let nextSelected: SelectedTimelineTrack | null = null;
+    let hasNextSelection = false;
+    let nextSelectedSceneId = "";
+    let nextSelectedElementIndex = -1;
 
     setVideoSchema((prev) => {
       const safeSchema = ensureFallbackScene(prev);
-      const targetScene = safeSchema.scenes[0];
       const startFrame = clamp(
         Math.round(requestedStartFrame ?? currentFrame),
         0,
         Math.max(0, safeSchema.durationInFrames - 1),
       );
+
+      if (asset.kind === "audio") {
+        const createdTrack = createAudioTrackFromAsset({
+          asset,
+          schema: safeSchema,
+          startFrame,
+        });
+
+        if (!createdTrack) {
+          return prev;
+        }
+
+        return {
+          ...safeSchema,
+          audioTracks: [...(safeSchema.audioTracks ?? []), createdTrack],
+        };
+      }
+
+      const targetScene = safeSchema.scenes[0];
       const lane =
         requestedLane === undefined
           ? getNextTimelineLane(safeSchema, targetScene.id)
@@ -260,11 +279,9 @@ export function useEditorSchemaActions({
           }
 
           const elementIndex = scene.elements.length;
-          nextSelected = {
-            kind: "element",
-            sceneId: scene.id,
-            elementIndex,
-          };
+          hasNextSelection = true;
+          nextSelectedSceneId = scene.id;
+          nextSelectedElementIndex = elementIndex;
 
           return {
             ...scene,
@@ -274,9 +291,13 @@ export function useEditorSchemaActions({
       };
     });
 
-    if (nextSelected?.kind === "element") {
-      setSelectedTimelineTrack(nextSelected);
-      setSelectedElementKey(`${nextSelected.sceneId}:${nextSelected.elementIndex}`);
+    if (hasNextSelection) {
+      setSelectedTimelineTrack({
+        kind: "element",
+        sceneId: nextSelectedSceneId,
+        elementIndex: nextSelectedElementIndex,
+      });
+      setSelectedElementKey(`${nextSelectedSceneId}:${nextSelectedElementIndex}`);
     }
   }, [currentFrame, resolveAssetById, setSelectedElementKey, setSelectedTimelineTrack, setVideoSchema]);
 
@@ -362,7 +383,9 @@ export function useEditorSchemaActions({
   }, [setSelectedElementKey, setSelectedTimelineTrack, setVideoSchema]);
 
   const splitElementTrack = useCallback((sceneId: string, elementIndex: number, splitFrame: number) => {
-    let nextSelected: SelectedTimelineTrack | null = null;
+    let hasNextSelection = false;
+    let nextSelectedSceneId = "";
+    let nextSelectedElementIndex = -1;
 
     setVideoSchema((prev) => ({
       ...prev,
@@ -401,11 +424,9 @@ export function useEditorSchemaActions({
         };
 
         nextElements.splice(elementIndex, 1, firstPart, secondPart);
-        nextSelected = {
-          kind: "element",
-          sceneId,
-          elementIndex: elementIndex + 1,
-        };
+        hasNextSelection = true;
+        nextSelectedSceneId = sceneId;
+        nextSelectedElementIndex = elementIndex + 1;
 
         return {
           ...scene,
@@ -414,9 +435,13 @@ export function useEditorSchemaActions({
       }),
     }));
 
-    if (nextSelected?.kind === "element") {
-      setSelectedTimelineTrack(nextSelected);
-      setSelectedElementKey(`${nextSelected.sceneId}:${nextSelected.elementIndex}`);
+    if (hasNextSelection) {
+      setSelectedTimelineTrack({
+        kind: "element",
+        sceneId: nextSelectedSceneId,
+        elementIndex: nextSelectedElementIndex,
+      });
+      setSelectedElementKey(`${nextSelectedSceneId}:${nextSelectedElementIndex}`);
     }
   }, [setSelectedElementKey, setSelectedTimelineTrack, setVideoSchema]);
 

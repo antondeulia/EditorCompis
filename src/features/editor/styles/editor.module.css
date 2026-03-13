@@ -181,18 +181,21 @@
 .panelTabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-bottom: 1px solid #d8e0ec;
+  width: 100%;
 }
 
 .tab,
 .tabActive {
   border: 0;
-  padding: 12px;
+  min-height: 44px;
+  padding: 4px 10px;
   text-align: center;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
   color: #74839c;
-  background: #eef3fb;
+  background: #f6f9ff;
   cursor: pointer;
+  border-bottom: 1px solid #d8e0ec;
 }
 
 .tabActive {
@@ -205,13 +208,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .tabWithIcon svg {
-  width: 22px;
-  height: 22px;
-  transform: translateY(1px);
+  width: 16px;
+  height: 16px;
+  transform: translateY(0.5px);
 }
 
 .magicIconPrimary {
@@ -236,10 +239,7 @@
 }
 
 .chatHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
+  padding: 0;
   border-bottom: 1px solid #dde6f3;
   background: #ffffff;
 }
@@ -517,10 +517,10 @@
 }
 
 .assetsPanel {
-  padding: 12px;
+  padding: 10px;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 10px;
+  gap: 8px;
   align-content: start;
   background: linear-gradient(180deg, #f7f9fd 0%, #f0f4fb 100%);
   min-height: 0;
@@ -533,11 +533,11 @@
 
 .assetsHeader {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   position: sticky;
   top: 0;
   z-index: 2;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   background: linear-gradient(180deg, #f7f9fd 20%, rgba(247, 249, 253, 0.8) 100%);
   backdrop-filter: blur(4px);
 }
@@ -551,7 +551,7 @@
 
 .assetsTitle {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   color: #203451;
 }
@@ -617,6 +617,7 @@
 
 .assetList {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   gap: 8px;
 }
@@ -627,8 +628,9 @@
   border-radius: 12px;
   padding: 8px;
   display: grid;
-  gap: 7px;
+  gap: 6px;
   box-shadow: 0 8px 20px rgba(27, 46, 74, 0.05);
+  min-width: 0;
 }
 
 .assetCard:active {
@@ -643,26 +645,41 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 9px;
-  background: #111826;
+  background: linear-gradient(135deg, #dbe7fb 0%, #eef4ff 100%);
   object-fit: cover;
 }
 
 .assetAudio {
   width: 100%;
-  height: 32px;
+  height: 40px;
 }
 
 .assetAudioPlaceholder,
 .assetFilePlaceholder {
   width: 100%;
-  height: 68px;
+  aspect-ratio: 16 / 9;
   border-radius: 9px;
-  background: #eef2f8;
+  background: linear-gradient(135deg, #e7eefb 0%, #f4f7fd 100%);
   display: grid;
   place-items: center;
   color: #5f6e84;
   font-size: 12px;
   font-weight: 600;
+}
+
+.assetFilePlaceholderLabel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(37, 52, 83, 0.08);
+  color: #30435f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
 }
 
 .assetKindBadge {
@@ -699,9 +716,11 @@
   font-weight: 700;
   color: #2f4059;
   line-height: 1.35;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .assetType {
@@ -709,6 +728,12 @@
   font-size: 10px;
   font-weight: 600;
   color: #7b8da8;
+}
+
+@media (max-width: 520px) {
+  .assetList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .assetAddButton {

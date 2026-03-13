@@ -51,7 +51,7 @@ type Params = {
 };
 
 function toSafeNonNegativeInt(value: number | undefined, fallback: number) {
-  if (!Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
   }
 
@@ -59,7 +59,7 @@ function toSafeNonNegativeInt(value: number | undefined, fallback: number) {
 }
 
 function toSafePositiveInt(value: number | undefined, fallback: number) {
-  if (!Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
   }
 

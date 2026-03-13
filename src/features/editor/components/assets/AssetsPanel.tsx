@@ -20,6 +20,15 @@ const filterLabels: Record<AssetFilter, string> = {
   image: "Photo",
 };
 
+function getAssetPreviewLabel(asset: AssetItem) {
+  const extension = asset.name.split(".").pop()?.trim().toUpperCase();
+  if (extension && extension.length <= 5) {
+    return extension;
+  }
+
+  return "FILE";
+}
+
 export function AssetsPanel({
   assets,
   assetUploadInputRef,
@@ -105,10 +114,10 @@ export function AssetsPanel({
                 ) : null}
                 {(asset.kind === "audio" && !asset.src) || asset.kind === "other" ? (
                   <div className={styles.assetFilePlaceholder}>
-                    <span>File</span>
+                    <span className={styles.assetFilePlaceholderLabel}>{getAssetPreviewLabel(asset)}</span>
                   </div>
                 ) : null}
-                <span className={styles.assetKindBadge}>{asset.kind.toUpperCase()}</span>
+                {asset.kind !== "other" ? <span className={styles.assetKindBadge}>{asset.kind.toUpperCase()}</span> : null}
               </div>
               <div className={styles.assetMetaRow}>
                 <div className={styles.assetMeta}>

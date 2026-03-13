@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import styles from "./NewProjectModal.module.css";
-import { CreateProjectInput } from "@/data/mocks/projects.mock";
+import { CreateProjectInput } from "@/data/projects";
 
 type NewProjectModalProps = {
   isOpen: boolean;
@@ -13,7 +13,6 @@ type NewProjectModalProps = {
 export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [lastPublishedAt, setLastPublishedAt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) {
@@ -23,10 +22,9 @@ export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalPr
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
-    await onCreate({ name, description, lastPublishedAt });
+    await onCreate({ name, description });
     setName("");
     setDescription("");
-    setLastPublishedAt("");
     setIsSubmitting(false);
     onClose();
   }
@@ -57,15 +55,6 @@ export function NewProjectModal({ isOpen, onClose, onCreate }: NewProjectModalPr
               rows={3}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-            />
-          </label>
-          <label className={styles.modalLabel}>
-            Last published date
-            <input
-              type="date"
-              required
-              value={lastPublishedAt}
-              onChange={(event) => setLastPublishedAt(event.target.value)}
             />
           </label>
           <div className={styles.modalActions}>

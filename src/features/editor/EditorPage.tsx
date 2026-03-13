@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { PlayerRef } from "@remotion/player";
 import { EditorLeftRail } from "./components/layout/EditorLeftRail";
 import { EditorRightSidebar } from "./components/layout/EditorRightSidebar";
@@ -16,7 +16,7 @@ import { localProjectGateway } from "./services/project-gateway";
 import { requestEditorChatReplyStream } from "./services/editor-chat-gateway";
 import { generateVideoSchema } from "./services/schema-generation-gateway";
 import { useEditorUiState } from "./hooks/useEditorUiState";
-import { demoVideoSchema, VideoSchema } from "./model/schema";
+import { VideoSchema } from "./model/schema";
 import { useEditorDerivedState } from "./hooks/useEditorDerivedState";
 import { useEditorPlaybackController } from "./hooks/useEditorPlaybackController";
 import { useEditorKeyboardShortcuts } from "./hooks/useEditorKeyboardShortcuts";
@@ -60,39 +60,6 @@ function isSchemaGenerationRequest(prompt: string) {
   );
 }
 
-function hasRenderableTimelineContent(schema: VideoSchema) {
-  if (!Number.isFinite(schema.fps) || schema.fps <= 0) {
-    return false;
-  }
-
-  const hasMasterAudio = (schema.audioTracks ?? []).some((track) => track.durationInFrames > 0);
-  if (hasMasterAudio) {
-    return true;
-  }
-
-  return schema.scenes.some((scene) => {
-    if (!Number.isFinite(scene.durationInFrames) || scene.durationInFrames <= 0) {
-      return false;
-    }
-
-    const hasSceneAudio = (scene.audioTracks ?? []).some((track) => track.durationInFrames > 0);
-    if (hasSceneAudio) {
-      return true;
-    }
-
-    return scene.elements.some((element) => {
-      if (!Number.isFinite(element.durationInFrames) || element.durationInFrames <= 0) {
-        return false;
-      }
-
-      return element.kind === "text"
-        || element.kind === "shape"
-        || element.kind === "image"
-        || element.kind === "video";
-    });
-  });
-}
-
 export function Editor({ slug }: EditorProps) {
   const playerRef = useRef<PlayerRef>(null);
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
@@ -101,36 +68,29 @@ export function Editor({ slug }: EditorProps) {
   const timelineTracksRef = useRef<HTMLDivElement | null>(null);
   const suppressTrackClickUntilRef = useRef(0);
 
-  const initialAssets = useMemo(
-    () => [
-      ...collectAssetsFromSchema(demoVideoSchema),
-      { id: "audio-bed", name: "music-track.wav", kind: "audio", sizeLabel: "Audio", mediaLabel: "Audio" },
-      { id: "captions", name: "captions.srt", kind: "other", sizeLabel: "Subtitle", mediaLabel: "Subtitle" },
-    ],
-    [],
-  );
-
-  const ui = useEditorUiState({ initialAssets });
-  const [videoSchema, setVideoSchema] = useState<VideoSchema>(() => normalizeOverlayTimeline(demoVideoSchema));
+  const ui = useEditorUiState({ initialAssets: [] });
+  const [videoSchema, setVideoSchema] = useState<VideoSchema>(() => localProjectGateway.createEmptyDraft(slug).schema);
   const [chatPrompt, setChatPrompt] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [selectedTimelineTrack, setSelectedTimelineTrack] = useState<SelectedTimelineTrack | null>(null);
   const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
+  const { setAssets } = ui;
 
   useEffect(() => {
     let isCancelled = false;
 
     void localProjectGateway.loadDraft(slug).then((snapshot) => {
-      if (isCancelled || !snapshot?.schema) {
+      if (isCancelled) {
+        return;
+      }
+
+      if (!snapshot?.schema) {
+        setVideoSchema(localProjectGateway.createEmptyDraft(slug).schema);
         return;
       }
 
       const normalizedDraft = normalizeOverlayTimeline(snapshot.schema);
-      if (!hasRenderableTimelineContent(normalizedDraft)) {
-        return;
-      }
-
       setVideoSchema(normalizedDraft);
     });
 
@@ -138,6 +98,24 @@ export function Editor({ slug }: EditorProps) {
       isCancelled = true;
     };
   }, [slug]);
+
+  useEffect(() => {
+    const schemaAssets = collectAssetsFromSchema(videoSchema);
+
+    setAssets((currentAssets) => {
+      const retainedManualAssets = currentAssets.filter((asset) => !asset.src || asset.source === "local");
+      const mergedAssets = [...retainedManualAssets];
+
+      for (const asset of schemaAssets) {
+        const hasSameSource = mergedAssets.some((currentAsset) => currentAsset.src && currentAsset.src === asset.src);
+        if (!hasSameSource) {
+          mergedAssets.push(asset);
+        }
+      }
+
+      return mergedAssets;
+    });
+  }, [setAssets, videoSchema]);
 
   const playback = useEditorPlaybackController({
     playerRef,
@@ -364,6 +342,12 @@ export function Editor({ slug }: EditorProps) {
           onChatPromptChange={setChatPrompt}
           onChatSubmit={handleChatSubmit}
           isChatLoading={isChatLoading}
+          activeTab={ui.activeLeftTab}
+          onTabChange={ui.setActiveLeftTab}
+          assets={ui.assets}
+          assetUploadInputRef={ui.assetUploadInputRef}
+          onAssetUpload={ui.handleAssetUpload}
+          onAddAssetToTimeline={(assetId) => addAssetTrack(assetId, playback.currentFrame)}
         />
 
         <PreviewStage

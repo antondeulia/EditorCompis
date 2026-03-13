@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { ProjectVideo } from "@/data/mocks/projects.mock";
+import { ProjectVideo } from "@/data/projects";
 import styles from "./VideoCard.module.css";
 
 type VideoCardProps = {
@@ -10,7 +10,7 @@ type VideoCardProps = {
 export function VideoCard({ video }: VideoCardProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
-  const uploadDate = new Date(video.uploadedAt).toLocaleDateString("en-US", {
+  const uploadDate = new Date(video.createdAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -36,16 +36,18 @@ export function VideoCard({ video }: VideoCardProps) {
   return (
     <article className={styles.videoCard}>
       <div className={styles.videoPreview}>
-        <video
-          ref={videoRef}
-          src="/videos/IMG_1507.MP4"
-          className={styles.videoPreviewMedia}
-          preload="metadata"
-          muted
-          loop
-          playsInline
-        />
-        <span className={styles.videoStatusBadge}>{video.status}</span>
+        {video.previewAssetUrl ? (
+          <video
+            ref={videoRef}
+            src={video.previewAssetUrl}
+            className={styles.videoPreviewMedia}
+            preload="metadata"
+            muted
+            loop
+            playsInline
+          />
+        ) : null}
+        <span className={styles.videoStatusBadge}>{video.status === "published" ? "Published" : "Draft"}</span>
         <button
           type="button"
           className={styles.videoPlayIcon}
@@ -71,8 +73,8 @@ export function VideoCard({ video }: VideoCardProps) {
         <h2 className={styles.videoCardTitle}>{video.title}</h2>
         <p className={styles.videoCardDescription}>{video.description}</p>
         <div className={styles.videoCardFooter}>
-          <p className={styles.videoCardMeta}>Uploaded: {uploadDate}</p>
-          <Link href={`/editor/${video.id}`} className={styles.videoEditButton}>
+          <p className={styles.videoCardMeta}>Created: {uploadDate}</p>
+          <Link href={`/editor/${video.slug}`} className={styles.videoEditButton}>
             Edit
           </Link>
         </div>

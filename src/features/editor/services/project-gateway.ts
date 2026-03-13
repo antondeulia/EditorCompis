@@ -1,4 +1,5 @@
-import { VideoSchema } from "../model/schema";
+import { createEmptyVideoSchema, hydrateVideoSchema, VideoSchema } from "../model/schema";
+import { normalizeOverlayTimeline } from "../lib/utils";
 
 export type EditorProjectSnapshot = {
   slug: string;
@@ -9,9 +10,18 @@ export type EditorProjectSnapshot = {
 export type EditorProjectGateway = {
   saveDraft: (snapshot: EditorProjectSnapshot) => Promise<void>;
   loadDraft: (slug: string) => Promise<EditorProjectSnapshot | null>;
+  createEmptyDraft: (slug: string) => EditorProjectSnapshot;
 };
 
 const storageKeyPrefix = "editor-compis:draft:";
+
+function buildSchemaTitleFromSlug(slug: string) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
 
 export const localProjectGateway: EditorProjectGateway = {
   async saveDraft(snapshot) {
@@ -33,10 +43,26 @@ export const localProjectGateway: EditorProjectGateway = {
     }
 
     try {
-      return JSON.parse(raw) as EditorProjectSnapshot;
+      const parsed = JSON.parse(raw) as EditorProjectSnapshot;
+      return {
+        ...parsed,
+        schema: normalizeOverlayTimeline(hydrateVideoSchema(parsed.schema)),
+      };
     } catch {
       return null;
     }
+  },
+
+  createEmptyDraft(slug) {
+    return {
+      slug,
+      schema: normalizeOverlayTimeline(
+        createEmptyVideoSchema({
+          title: buildSchemaTitleFromSlug(slug) || "Untitled Video",
+        }),
+      ),
+      updatedAt: new Date().toISOString(),
+    };
   },
 };
 

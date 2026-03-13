@@ -5,7 +5,6 @@ type EditorPageProps = {
 };
 
 export default async function EditorPage({ params }: EditorPageProps) {
-  await new Promise((resolve) => setTimeout(resolve, 700));
   const { slug } = await params;
 
   return <Editor slug={slug} />;

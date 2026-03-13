@@ -297,6 +297,7 @@ export function isVideoSchema(value: JsonValue | undefined): value is VideoSchem
 
   return (
     isString(value.id) &&
+    (value.version === undefined || value.version === 1) &&
     isString(value.title) &&
     isNonNegativeFiniteNumber(value.fps) &&
     isNonNegativeFiniteNumber(value.width) &&

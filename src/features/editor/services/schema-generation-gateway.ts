@@ -1,4 +1,4 @@
-import { VideoSchema } from "../model/schema";
+import { hydrateVideoSchema, VideoSchema } from "../model/schema";
 import { isVideoSchema } from "../model/schema-validation";
 import { resolveCompisApiUrl } from "./compis-api-url";
 import { isJsonRecord, JsonValue, tryParseJson } from "./http-json";
@@ -24,7 +24,7 @@ function parseGenerateSchemaSuccess(
     return null;
   }
 
-  return { schema: value.schema };
+  return { schema: hydrateVideoSchema(value.schema) };
 }
 
 function parseErrorMessage(value: JsonValue | undefined): string | null {

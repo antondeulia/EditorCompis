@@ -25,8 +25,14 @@ export function useTimelineAutoExtend({
     const chunkFrames = Math.max(Math.round(fps * timelineExtensionChunkSeconds), fps);
 
     function maybeExtendTimeline() {
-      const remaining = timelineElement.scrollWidth - (timelineElement.scrollLeft + timelineElement.clientWidth);
-      const threshold = Math.max(timelineElement.clientWidth * timelineExtensionThresholdRatio, 120);
+      const currentTimelineElement = timelineTracksRef.current;
+      if (!currentTimelineElement) {
+        return;
+      }
+
+      const remaining =
+        currentTimelineElement.scrollWidth - (currentTimelineElement.scrollLeft + currentTimelineElement.clientWidth);
+      const threshold = Math.max(currentTimelineElement.clientWidth * timelineExtensionThresholdRatio, 120);
 
       if (remaining > threshold) {
         return;

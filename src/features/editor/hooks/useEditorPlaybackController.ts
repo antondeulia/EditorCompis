@@ -394,11 +394,18 @@ export function useEditorPlaybackController({
     }
 
     function updatePlayheadMetrics() {
-      const scrubRect = scrubZoneElement.getBoundingClientRect();
-      const mainRect = timelineMainElement.getBoundingClientRect();
+      const currentTimelineElement = timelineTracksRef.current;
+      const currentTimelineMainElement = timelineMainRef.current;
+      const currentScrubZoneElement = scrubZoneRef.current;
+      if (!currentTimelineElement || !currentTimelineMainElement || !currentScrubZoneElement) {
+        return;
+      }
+
+      const scrubRect = currentScrubZoneElement.getBoundingClientRect();
+      const mainRect = currentTimelineMainElement.getBoundingClientRect();
       const nextOffsetLeft = scrubRect.left - mainRect.left;
       const nextWidth = Math.max(scrubRect.width, 1);
-      const nextScrollLeft = timelineElement.scrollLeft;
+      const nextScrollLeft = currentTimelineElement.scrollLeft;
 
       setTimelinePlayheadMetrics((prev) => {
         if (Math.abs(prev.offsetLeft - nextOffsetLeft) < 0.5 && Math.abs(prev.width - nextWidth) < 0.5) {

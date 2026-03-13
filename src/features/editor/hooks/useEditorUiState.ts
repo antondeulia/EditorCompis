@@ -297,6 +297,7 @@ export function useEditorUiState({ initialAssets }: UseEditorUiStateParams) {
     isChatScrollbarVisible,
     assets,
     assetUploadInputRef,
+    setAssets,
     setActiveLeftTab,
     handleRightSidebarSectionClick,
     handleChatScroll,

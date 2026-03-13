@@ -1,5 +1,5 @@
 import { AssetItem } from "../model/types";
-import { VideoElement, VideoSchema } from "../model/schema";
+import { AudioTrack, VideoElement, VideoSchema } from "../model/schema";
 
 type CreateElementParams = {
   asset: AssetItem;
@@ -27,7 +27,7 @@ function resolveAssetDurationInFrames(asset: AssetItem, schema: VideoSchema, sta
 }
 
 export function canAddAssetToTimeline(asset: AssetItem) {
-  return asset.kind === "video" || asset.kind === "image";
+  return asset.kind === "video" || asset.kind === "image" || asset.kind === "audio";
 }
 
 export function createElementFromAsset({
@@ -75,6 +75,26 @@ export function createElementFromAsset({
     width: Math.round(schema.width * 0.84),
     height: Math.round(schema.height * 0.84),
     borderRadius: 20,
+  };
+}
+
+export function createAudioTrackFromAsset({
+  asset,
+  schema,
+  startFrame,
+}: Omit<CreateElementParams, "lane">): AudioTrack | null {
+  if (!asset.src || asset.kind !== "audio") {
+    return null;
+  }
+
+  return {
+    id: `audio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: "music",
+    src: asset.src,
+    assetId: asset.id,
+    source: asset.source === "server" ? "user-upload" : "library",
+    startFrame,
+    durationInFrames: resolveAssetDurationInFrames(asset, schema, startFrame),
   };
 }
 

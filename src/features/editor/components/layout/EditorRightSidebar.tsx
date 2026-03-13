@@ -365,9 +365,7 @@ export function EditorRightSidebar({
                   ? "Scene and project options are shown in this panel."
                   : activeSection === "AI Tools"
                     ? "Run AI actions for script, visuals and timing."
-                    : activeSection === "Elements"
-                      ? "Manage elements and layer ordering here."
-                      : activeSection === "Captions"
+                    : activeSection === "Captions"
                         ? "Configure subtitle style, timing and position."
                         : "Browse uploaded files and media library."}
               </p>

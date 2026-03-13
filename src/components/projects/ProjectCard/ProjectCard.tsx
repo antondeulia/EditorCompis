@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Project } from "@/data/mocks/projects.mock";
+import { Project } from "@/data/projects";
 import styles from "./ProjectCard.module.css";
 
 type ProjectCardProps = {
@@ -7,21 +7,16 @@ type ProjectCardProps = {
 };
 
 export function ProjectCard({ project }: ProjectCardProps) {
-  const logoThemeMap: Record<string, string> = {
-    "brand-campaign": styles.logoSports,
-    "course-edits": styles.logoHomechoice,
-    "podcast-highlights": styles.logoPodcast,
-  };
-
-  const logoTheme = logoThemeMap[project.id] ?? styles.logoSports;
-  const logoLabel =
-    project.id === "brand-campaign"
-      ? "S"
-      : project.id === "course-edits"
-        ? "C"
-        : "POI";
+  const logoThemeVariants = [styles.logoSports, styles.logoHomechoice, styles.logoPodcast];
+  const logoTheme = logoThemeVariants[project.name.length % logoThemeVariants.length];
+  const logoLabel = project.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((token) => token[0]?.toUpperCase() ?? "")
+    .join("");
   const latestVideos = [...project.videos]
-    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 3);
 
   return (
@@ -40,7 +35,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
             d="M14 3h7v7h-2V6.41l-9.3 9.3-1.4-1.42 9.29-9.29H14V3ZM5 5h6v2H7v10h10v-4h2v6H5V5Z"
           />
         </svg>
-        {project.workspace}
+        {project.slug}
       </p>
       <p className={styles.projectCardDescription}>{project.description}</p>
       <div className={styles.latestVideosBlock}>

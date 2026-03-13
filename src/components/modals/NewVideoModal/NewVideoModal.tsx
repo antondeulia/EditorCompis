@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./NewVideoModal.module.css";
-import { CreateVideoInput } from "@/data/mocks/projects.mock";
+import { CreateVideoInput } from "@/data/projects";
 import { NewVideoModalDetailsStep } from "./NewVideoModalDetailsStep";
 import { NewVideoModalStartStep } from "./NewVideoModalStartStep";
 import { NewVideoModalTemplateStep } from "./NewVideoModalTemplateStep";
@@ -164,7 +164,12 @@ export function NewVideoModal({ isOpen, onClose, onCreate }: NewVideoModalProps)
 
     setIsSubmitting(true);
     await onCreate({
-      type: flow === "upload" ? "upload-video" : "blank-template",
+      source:
+        flow === "upload"
+          ? "upload"
+          : flow === "template"
+            ? "template"
+            : "blank",
       title,
       description,
     });
