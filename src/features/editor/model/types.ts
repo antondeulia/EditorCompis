@@ -52,6 +52,15 @@ export type OverlayTrack = {
 
 export type TrackVisualKind = "video" | "audio" | "text" | "shape" | "image";
 
+export type TimelineElementDrop =
+  | {
+      kind: "text";
+    }
+  | {
+      kind: "shape";
+      shape: "rect" | "circle";
+    };
+
 export type DragState = {
   sceneId: string;
   elementIndex: number;

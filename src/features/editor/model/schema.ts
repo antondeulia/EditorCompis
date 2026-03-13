@@ -262,7 +262,7 @@ export function createEmptyVideoSchema(options?: CreateVideoSchemaOptions): Vide
   return {
     id: options?.id ?? `schema-${Date.now()}`,
     version: 1,
-    title: options?.title ?? "untitled-video",
+    title: options?.title ?? "",
     fps: format.fps,
     width: format.width,
     height: format.height,

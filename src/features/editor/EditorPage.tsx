@@ -8,21 +8,23 @@ import { EditorTimeline } from "./components/timeline/EditorTimeline";
 import { EditorTopBar } from "./components/layout/EditorTopBar";
 import { PlaybackToolbar } from "./components/playback/PlaybackToolbar/PlaybackToolbar";
 import { PreviewStage } from "./components/preview/PreviewStage";
-import { EditorProps, SelectedTimelineTrack } from "./model/types";
+import { EditorProps, SelectedTimelineTrack, TimelineElementDrop } from "./model/types";
 import { collectAssetsFromSchema, formatTime, getElementLabel, normalizeOverlayTimeline } from "./lib/utils";
 import { useEditorSchemaActions } from "./hooks/useEditorSchemaActions";
 import { useEditorInteractions } from "./hooks/useEditorInteractions";
 import { localProjectGateway } from "./services/project-gateway";
-import { requestEditorChatReplyStream } from "./services/editor-chat-gateway";
-import { generateVideoSchema } from "./services/schema-generation-gateway";
 import { useEditorUiState } from "./hooks/useEditorUiState";
 import { VideoSchema } from "./model/schema";
 import { useEditorDerivedState } from "./hooks/useEditorDerivedState";
 import { useEditorPlaybackController } from "./hooks/useEditorPlaybackController";
 import { useEditorKeyboardShortcuts } from "./hooks/useEditorKeyboardShortcuts";
+import { useEditorChat } from "./hooks/useEditorChat";
 import styles from "./styles/editor.module.css";
 
+/*
 type ChatRole = "user" | "assistant";
+type ChatWorkflowStatus = "idle" | "planning" | "awaiting_approval" | "applying";
+type ChatWorkflowStepStatus = "pending" | "active" | "done";
 
 type ChatMessage = {
   id: string;
@@ -30,6 +32,21 @@ type ChatMessage = {
   content: string;
   createdAt: string | null;
 };
+
+type ChatWorkflowStep = {
+  id: string;
+  label: string;
+  status: ChatWorkflowStepStatus;
+};
+
+type LocalAddElementKind = "text" | "rect" | "circle";
+
+type PendingChatAction =
+  | {
+      kind: "local-add";
+      element: LocalAddElementKind;
+      prompt: string;
+    };
 
 function createChatMessage(role: ChatRole, content: string): ChatMessage {
   return {
@@ -49,6 +66,243 @@ const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
   },
 ];
 
+function shouldUseEditWorkflow(prompt: string) {
+  const normalized = prompt.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized.startsWith("/schema ")) {
+    return false;
+  }
+
+  const editKeywords = [
+    "add",
+    "remove",
+    "change",
+    "edit",
+    "create",
+    "make",
+    "insert",
+    "trim",
+    "cut",
+    "caption",
+    "subtitle",
+    "transition",
+    "animate",
+    "montage",
+    "overlay",
+    "text",
+    "добав",
+    "убер",
+    "измен",
+    "сдел",
+    "созд",
+    "монтаж",
+    "текст",
+    "субтит",
+    "аним",
+    "переход",
+    "обреж",
+  ];
+
+  return editKeywords.some((keyword) => normalized.includes(keyword));
+}
+
+function detectLocalAddElementIntent(prompt: string): LocalAddElementKind | null {
+  if (prompt.length >= 0) {
+    return null;
+  }
+
+  const normalized = prompt.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const wantsAdd =
+    normalized.includes("add") ||
+    normalized.includes("insert") ||
+    normalized.includes("create") ||
+    normalized.includes("добав") ||
+    normalized.includes("встав") ||
+    normalized.includes("созда");
+
+  if (!wantsAdd) {
+    return null;
+  }
+
+  if (
+    normalized.includes("text") ||
+    normalized.includes("title") ||
+    normalized.includes("caption") ||
+    normalized.includes("subtitle") ||
+    normalized.includes("текст") ||
+    normalized.includes("титр") ||
+    normalized.includes("субтит")
+  ) {
+    return "text";
+  }
+
+  if (
+    normalized.includes("circle") ||
+    normalized.includes("dot") ||
+    normalized.includes("badge") ||
+    normalized.includes("круг") ||
+    normalized.includes("круж")
+  ) {
+    return "circle";
+  }
+
+  if (
+    normalized.includes("rect") ||
+    normalized.includes("rectangle") ||
+    normalized.includes("box") ||
+    normalized.includes("shape") ||
+    normalized.includes("block") ||
+    normalized.includes("прямоуг") ||
+    normalized.includes("плашк") ||
+    normalized.includes("блок") ||
+    normalized.includes("фигур")
+  ) {
+    return "rect";
+  }
+
+  return null;
+}
+
+function buildLocalAddPlanMessage(element: LocalAddElementKind) {
+  if (element === "text") {
+    return [
+      "План готов:",
+      "1. Добавлю текстовый элемент на текущую позицию плейхеда.",
+      "2. Элемент появится как отдельная дорожка overlay на таймлайне.",
+      "3. После добавления его можно будет сразу выделить и отредактировать справа.",
+      "",
+      "Подтвердить добавление текста?",
+    ].join("\n");
+  }
+
+  if (element === "circle") {
+    return [
+      "План готов:",
+      "1. Добавлю круглый shape-элемент на текущую позицию плейхеда.",
+      "2. Он появится как отдельная overlay-дорожка на таймлайне.",
+      "3. После добавления его можно будет двигать и менять размер.",
+      "",
+      "Подтвердить добавление круга?",
+    ].join("\n");
+  }
+
+  return [
+    "План готов:",
+    "1. Добавлю прямоугольный shape-элемент на текущую позицию плейхеда.",
+    "2. Он появится как отдельная overlay-дорожка на таймлайне.",
+    "3. После добавления его можно будет двигать и менять размер.",
+    "",
+    "Подтвердить добавление элемента?",
+  ].join("\n");
+}
+
+function buildUnsupportedEditMessage() {
+  return [
+    "Пока умею только простые локальные действия без генерации всего монтажа.",
+    "Сейчас можно нормально добавить:",
+    "1. Текст",
+    "2. Прямоугольник",
+    "3. Круг",
+    "",
+    "Напиши, например: `Добавь текст` или `Добавь круг`.",
+  ].join("\n");
+}
+
+void buildUnsupportedEditMessage;
+
+function normalizeDecisionPrompt(prompt: string) {
+  return prompt.trim().toLowerCase().replace(/[.!?,;:()"']/g, "");
+}
+
+function isApprovalPrompt(prompt: string) {
+  const normalized = normalizeDecisionPrompt(prompt);
+  return [
+    "y",
+    "yes",
+    "yeah",
+    "yep",
+    "ok",
+    "okay",
+    "sure",
+    "approve",
+    "do it",
+    "go ahead",
+    "да",
+    "ага",
+    "ок",
+    "окей",
+    "подтверждаю",
+    "подходит",
+    "делай",
+    "сделай",
+  ].includes(normalized);
+}
+
+function isRejectPrompt(prompt: string) {
+  const normalized = normalizeDecisionPrompt(prompt);
+  return [
+    "n",
+    "no",
+    "nope",
+    "cancel",
+    "stop",
+    "not now",
+    "нет",
+    "не",
+    "не надо",
+    "отмена",
+    "отмени",
+    "стоп",
+  ].includes(normalized);
+}
+
+function buildWorkflowSteps(status: ChatWorkflowStatus): ChatWorkflowStep[] {
+  const getStepStatus = (current: "planning" | "awaiting_approval" | "applying"): ChatWorkflowStepStatus => {
+    if (status === "idle") {
+      return "pending";
+    }
+
+    const order = ["planning", "awaiting_approval", "applying"] as const;
+    const currentIndex = order.indexOf(current);
+    const activeIndex = order.indexOf(status === "idle" ? "planning" : status);
+
+    if (currentIndex < activeIndex) {
+      return "done";
+    }
+
+    if (currentIndex === activeIndex) {
+      return "active";
+    }
+
+    return "pending";
+  };
+
+  return [
+    {
+      id: "planning",
+      label: "Building plan",
+      status: getStepStatus("planning"),
+    },
+    {
+      id: "approval",
+      label: "Waiting for approval",
+      status: getStepStatus("awaiting_approval"),
+    },
+    {
+      id: "applying",
+      label: "Applying changes to timeline",
+      status: getStepStatus("applying"),
+    },
+  ];
+}
+
 function isSchemaGenerationRequest(prompt: string) {
   const token = prompt.trim().toLowerCase();
   return (
@@ -60,6 +314,8 @@ function isSchemaGenerationRequest(prompt: string) {
   );
 }
 
+*/
+
 export function Editor({ slug }: EditorProps) {
   const playerRef = useRef<PlayerRef>(null);
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
@@ -70,9 +326,6 @@ export function Editor({ slug }: EditorProps) {
 
   const ui = useEditorUiState({ initialAssets: [] });
   const [videoSchema, setVideoSchema] = useState<VideoSchema>(() => localProjectGateway.createEmptyDraft(slug).schema);
-  const [chatPrompt, setChatPrompt] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
-  const [isChatLoading, setIsChatLoading] = useState(false);
   const [selectedTimelineTrack, setSelectedTimelineTrack] = useState<SelectedTimelineTrack | null>(null);
   const [selectedElementKey, setSelectedElementKey] = useState<string | null>(null);
   const { setAssets } = ui;
@@ -156,12 +409,14 @@ export function Editor({ slug }: EditorProps) {
     updateSelectedTextElement,
   } = schemaActions;
 
-  const handleDropAssetToTimeline = useCallback((assetId: string, clientX: number, clientY: number) => {
+  const resolveTimelineDropPlacement = useCallback((clientX: number, clientY: number) => {
     const scrubRect = scrubZoneRef.current?.getBoundingClientRect();
     const tracksRect = timelineTracksRef.current?.getBoundingClientRect();
     if (!scrubRect || !tracksRect) {
-      addAssetTrack(assetId, playback.currentFrame);
-      return;
+      return {
+        startFrame: playback.currentFrame,
+        overlayLane: 0,
+      };
     }
 
     const scrubWidth = Math.max(scrubRect.width, 1);
@@ -177,8 +432,26 @@ export function Editor({ slug }: EditorProps) {
     const absoluteLane = Math.max(0, Math.floor(relativeY / rowHeight));
     const overlayLane = Math.max(0, absoluteLane - sceneLaneCount);
 
+    return { startFrame, overlayLane };
+  }, [derived.sceneTracks, playback.currentFrame, playback.timelineFrameSpan]);
+
+  const handleDropAssetToTimeline = useCallback((assetId: string, clientX: number, clientY: number) => {
+    const { startFrame, overlayLane } = resolveTimelineDropPlacement(clientX, clientY);
     addAssetTrack(assetId, startFrame, overlayLane);
-  }, [addAssetTrack, derived.sceneTracks, playback.currentFrame, playback.timelineFrameSpan]);
+    playback.seekToFrame(startFrame);
+  }, [addAssetTrack, playback, resolveTimelineDropPlacement]);
+
+  const handleDropElementToTimeline = useCallback((payload: TimelineElementDrop, clientX: number, clientY: number) => {
+    const { startFrame, overlayLane } = resolveTimelineDropPlacement(clientX, clientY);
+
+    if (payload.kind === "text") {
+      addTextTrack(startFrame, overlayLane);
+    } else {
+      addShapeTrack(payload.shape, startFrame, overlayLane);
+    }
+
+    playback.seekToFrame(startFrame);
+  }, [addShapeTrack, addTextTrack, playback, resolveTimelineDropPlacement]);
 
   const interactions = useEditorInteractions({
     scrubZoneRef,
@@ -201,6 +474,14 @@ export function Editor({ slug }: EditorProps) {
     deleteSelectedTimelineTrack,
   });
 
+  const chat = useEditorChat({
+    videoSchema,
+    setVideoSchema,
+    setSelectedElementKey,
+    setSelectedTimelineTrack,
+    seekToFrame: playback.seekToFrame,
+  });
+
   const handleSaveProject = () => {
     void localProjectGateway.saveDraft({
       slug,
@@ -210,6 +491,43 @@ export function Editor({ slug }: EditorProps) {
     playback.seekToFrame(0);
   };
 
+/*
+  const handleApprovePlan = useCallback(async () => {
+    if (!pendingAction || isChatLoading) {
+      return;
+    }
+
+    setChatWorkflowStatus("applying");
+    setPendingAction(null);
+
+    if (pendingAction.element === "text") {
+      addTextTrack(playback.currentFrame);
+    } else if (pendingAction.element === "circle") {
+      addShapeTrack("circle", playback.currentFrame);
+    } else {
+      addShapeTrack("rect", playback.currentFrame);
+    }
+
+    setChatWorkflowStatus("idle");
+    setChatMessages((prev) => [
+      ...prev,
+      createChatMessage("assistant", "Готово. Элемент добавлен на дорожку в текущую позицию плейхеда."),
+    ]);
+  }, [addShapeTrack, addTextTrack, isChatLoading, pendingAction, playback.currentFrame]);
+
+  const handleRejectPlan = useCallback(() => {
+    if (!pendingAction || isChatLoading) {
+      return;
+    }
+
+    setPendingAction(null);
+    setChatWorkflowStatus("idle");
+    setChatMessages((prev) => [
+      ...prev,
+      createChatMessage("assistant", "Plan cancelled. Tell me what to change differently and I will build a new one."),
+    ]);
+  }, [isChatLoading, pendingAction]);
+
   const handleChatSubmit = useCallback(async () => {
     const prompt = chatPrompt.trim();
     if (!prompt || isChatLoading) {
@@ -217,30 +535,61 @@ export function Editor({ slug }: EditorProps) {
     }
 
     const userMessage = createChatMessage("user", prompt);
-    const nextHistory = [...chatMessages, userMessage].map((message) => ({
+    const history = chatMessages.map((message) => ({
       role: message.role,
       content: message.content,
     }));
 
     setChatMessages((prev) => [...prev, userMessage]);
     setChatPrompt("");
+
+    if (pendingAction && isApprovalPrompt(prompt)) {
+      await handleApprovePlan();
+      return;
+    }
+
+    if (pendingAction && isRejectPrompt(prompt)) {
+      handleRejectPlan();
+      return;
+    }
+
     setIsChatLoading(true);
 
     try {
-      if (isSchemaGenerationRequest(prompt)) {
+      if (isSchemaGenerationRequest(prompt) || shouldUseEditWorkflow(prompt)) {
+        setChatWorkflowStatus("planning");
+
         const schemaPrompt = prompt.startsWith("/schema")
-          ? prompt.replace(/^\/schema\s*/i, "").trim()
+          ? prompt.replace(new RegExp("^/schema\\s*", "i"), "").trim()
           : prompt;
         const data = await generateVideoSchema(
           schemaPrompt.length > 0 ? schemaPrompt : "Generate video schema based on recent chat context",
           videoSchema,
         );
+
+        setChatWorkflowStatus("applying");
         const normalizedSchema = normalizeOverlayTimeline(data.schema);
         setVideoSchema(normalizedSchema);
         setSelectedElementKey(null);
         setSelectedTimelineTrack(null);
         playback.seekToFrame(0);
-        setChatMessages((prev) => [...prev, createChatMessage("assistant", "Schema generated and applied to preview.")]);
+        setChatWorkflowStatus("idle");
+        setChatMessages((prev) => [
+          ...prev,
+          createChatMessage("assistant", "Updated edit schema generated from your prompt and applied to the timeline."),
+        ]);
+        return;
+      }
+
+      const localAddIntent = detectLocalAddElementIntent(prompt);
+      if (localAddIntent) {
+        setChatWorkflowStatus("awaiting_approval");
+        setPendingAction({
+          kind: "local-add",
+          element: localAddIntent,
+          prompt,
+        });
+        setChatMessages((prev) => [...prev, createChatMessage("assistant", buildLocalAddPlanMessage(localAddIntent))]);
         return;
       }
 
@@ -257,7 +606,7 @@ export function Editor({ slug }: EditorProps) {
 
       await requestEditorChatReplyStream({
         message: prompt,
-        history: nextHistory,
+        history,
         onToken: (token) => {
           setChatMessages((prev) =>
             prev.map((message) =>
@@ -268,11 +617,23 @@ export function Editor({ slug }: EditorProps) {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      setChatWorkflowStatus("idle");
       setChatMessages((prev) => [...prev, createChatMessage("assistant", `Error: ${message}`)]);
     } finally {
       setIsChatLoading(false);
     }
-  }, [chatMessages, chatPrompt, isChatLoading, playback, videoSchema]);
+  }, [
+    chatMessages,
+    chatPrompt,
+    handleApprovePlan,
+    handleRejectPlan,
+    isChatLoading,
+    pendingAction,
+    playback,
+    videoSchema,
+  ]);
+
+*/
 
   return (
     <div
@@ -337,11 +698,13 @@ export function Editor({ slug }: EditorProps) {
           onResizeStart={ui.handleLeftRailResizeStart}
           isChatScrollbarVisible={ui.isChatScrollbarVisible}
           onChatScroll={ui.handleChatScroll}
-          chatMessages={chatMessages}
-          chatPrompt={chatPrompt}
-          onChatPromptChange={setChatPrompt}
-          onChatSubmit={handleChatSubmit}
-          isChatLoading={isChatLoading}
+          chatMessages={chat.chatMessages}
+          chatPrompt={chat.chatPrompt}
+          onChatPromptChange={chat.setChatPrompt}
+          onChatSubmit={chat.handleChatSubmit}
+          isChatLoading={chat.isChatLoading}
+          chatWorkflowStatus={chat.chatWorkflowStatus}
+          chatWorkflowSteps={chat.chatWorkflowSteps}
           activeTab={ui.activeLeftTab}
           onTabChange={ui.setActiveLeftTab}
           assets={ui.assets}
@@ -432,6 +795,7 @@ export function Editor({ slug }: EditorProps) {
           setSelectedElementKey(`${sceneId}:${elementIndex}`);
         }}
         onDropAssetToTimeline={handleDropAssetToTimeline}
+        onDropElementToTimeline={handleDropElementToTimeline}
         playheadLeftPx={playback.playheadLeftPx}
       />
     </div>

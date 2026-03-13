@@ -321,6 +321,97 @@
   gap: 10px;
 }
 
+.chatWorkflowCard {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6ff 100%);
+  border: 1px solid #d9e3f6;
+  box-shadow: 0 10px 24px rgba(79, 104, 155, 0.08);
+}
+
+.chatWorkflowEyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a7b96;
+}
+
+.chatWorkflowSteps {
+  display: grid;
+  gap: 8px;
+}
+
+.chatWorkflowStep {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #7e8ba0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chatWorkflowStepActive {
+  color: #21324a;
+}
+
+.chatWorkflowStepDone {
+  color: #2b6a45;
+}
+
+.chatWorkflowStepDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #cbd4e4;
+  flex: 0 0 auto;
+}
+
+.chatWorkflowStepActive .chatWorkflowStepDot {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 4px rgba(var(--color-accent-rgb), 0.16);
+}
+
+.chatWorkflowStepDone .chatWorkflowStepDot {
+  background: #22c55e;
+}
+
+.chatWorkflowActions {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.chatWorkflowApproveButton,
+.chatWorkflowCancelButton {
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chatWorkflowApproveButton {
+  background: #111827;
+  color: #ffffff;
+}
+
+.chatWorkflowCancelButton {
+  background: #ffffff;
+  color: #32445f;
+  border-color: #d5deec;
+}
+
+.chatWorkflowApproveButton:disabled,
+.chatWorkflowCancelButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .chatMessage {
   display: grid;
   gap: 4px;

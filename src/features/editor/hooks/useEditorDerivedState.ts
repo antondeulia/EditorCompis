@@ -85,6 +85,27 @@ export function useEditorDerivedState({
     return element.timelineStartFrame !== undefined;
   }, []);
 
+  const isHiddenSupportScene = useCallback((scene: VideoSchema["scenes"][number]) => {
+    const hasOnlyTimelineElements = scene.elements.length > 0 && scene.elements.every((element) => isTimelineOverlayElement(element));
+    if (!hasOnlyTimelineElements) {
+      return false;
+    }
+
+    return (
+      scene.name === "Scene"
+      && (scene.startFrame ?? 0) === 0
+      && scene.durationInFrames === videoSchema.durationInFrames
+      && (scene.timelineLane ?? 0) === 0
+      && (scene.timelineTrimStartFrames ?? 0) === 0
+      && (scene.timelineTrimEndFrames ?? 0) === 0
+      && !scene.transitionIn
+      && !scene.transitionOut
+      && !scene.cameraKeyframes?.length
+      && !scene.effects?.length
+      && !scene.audioTracks?.length
+    );
+  }, [isTimelineOverlayElement, videoSchema.durationInFrames]);
+
   const getSceneClipKindClassName = useCallback((kind: TrackVisualKind) => {
     switch (kind) {
       case "text":
@@ -113,6 +134,10 @@ export function useEditorDerivedState({
 
   const sceneTracks = useMemo<SceneTrack[]>(() => {
     const tracks = videoSchema.scenes.flatMap((scene, sceneIndex) => {
+      if (isHiddenSupportScene(scene)) {
+        return [];
+      }
+
       const primaryElement =
         scene.elements.find((element) => !isTimelineOverlayElement(element))
         ?? getScenePrimaryElement(scene)
@@ -157,7 +182,7 @@ export function useEditorDerivedState({
 
     tracks.sort((a, b) => a.lane - b.lane || a.startFrame - b.startFrame || a.id.localeCompare(b.id));
     return tracks;
-  }, [fps, isTimelineOverlayElement, timelineFrameSpan, videoSchema.scenes]);
+  }, [fps, isHiddenSupportScene, isTimelineOverlayElement, timelineFrameSpan, videoSchema.scenes]);
 
   const overlayTracks = useMemo<OverlayTrack[]>(() => {
     const tracks: OverlayTrack[] = [];
@@ -345,7 +370,7 @@ export function useEditorDerivedState({
 
   const inspectorRows = useMemo<InspectorRow[]>(
     () => [
-      ...videoSchema.scenes.map((scene) => ({
+      ...videoSchema.scenes.filter((scene) => !isHiddenSupportScene(scene)).map((scene) => ({
         id: scene.id,
         label: "<Scene>",
         meta: `${scene.name} - ${(scene.durationInFrames / fps).toFixed(1)}s`,
@@ -356,7 +381,7 @@ export function useEditorDerivedState({
         meta: `${track.sceneName} / ${track.elementName}`,
       })),
     ],
-    [fps, overlayTracks, videoSchema.scenes],
+    [fps, isHiddenSupportScene, overlayTracks, videoSchema.scenes],
   );
 
   return {

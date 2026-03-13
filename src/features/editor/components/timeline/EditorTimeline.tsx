@@ -1,9 +1,9 @@
 "use client";
 
-import { CSSProperties, DragEvent, PointerEvent, RefObject, useState } from "react";
+import { CSSProperties, DragEvent, PointerEvent, RefObject, useEffect, useState } from "react";
 import { TimelineInspector } from "./TimelineInspector/TimelineInspector";
 import { TrackVisual } from "./TrackVisual";
-import { OverlayTrack, SelectedTimelineTrack, TrackVisualKind } from "../../model/types";
+import { OverlayTrack, SelectedTimelineTrack, TimelineElementDrop, TrackVisualKind } from "../../model/types";
 import styles from "../../styles/editor.module.css";
 
 type SceneTrack = {
@@ -111,6 +111,7 @@ type EditorTimelineProps = {
   onSelectSceneTrack: (sceneId: string) => void;
   onSelectElementTrack: (sceneId: string, elementIndex: number) => void;
   onDropAssetToTimeline: (assetId: string, clientX: number, clientY: number) => void;
+  onDropElementToTimeline: (payload: TimelineElementDrop, clientX: number, clientY: number) => void;
   playheadLeftPx: number;
 };
 
@@ -144,12 +145,43 @@ export function EditorTimeline({
   onSelectSceneTrack,
   onSelectElementTrack,
   onDropAssetToTimeline,
+  onDropElementToTimeline,
   playheadLeftPx,
 }: EditorTimelineProps) {
+  const trackRowHeight = 36;
+  const tracksVerticalPadding = 16;
   const laneDragExpansion = 24;
   const [isAssetDropTarget, setIsAssetDropTarget] = useState(false);
+  const [visibleRowCount, setVisibleRowCount] = useState(4);
   const minScenePlaceholderRows = sceneTracks.length > 0 ? 2 : 0;
   const minOverlayPlaceholderRows = 2;
+
+  useEffect(() => {
+    const tracksElement = timelineTracksRef.current;
+    if (!tracksElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const updateVisibleRowCount = () => {
+      const nextVisibleRowCount = Math.max(
+        minOverlayPlaceholderRows,
+        Math.ceil(Math.max(0, tracksElement.clientHeight - tracksVerticalPadding) / trackRowHeight),
+      );
+      setVisibleRowCount(nextVisibleRowCount);
+    };
+
+    updateVisibleRowCount();
+
+    const observer = new ResizeObserver(() => {
+      updateVisibleRowCount();
+    });
+    observer.observe(tracksElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [timelineTracksRef]);
+
   const timelineFrameSpan = Math.max(1, Math.round(fps * timelineDurationSeconds));
   const secondTicks: Array<{ frame: number; second: number; isMajor: boolean }> = [];
   for (let second = 0; second <= timelineDurationSeconds + 0.0001; second += 1) {
@@ -169,7 +201,8 @@ export function EditorTimeline({
     -1,
   );
   const sceneLaneCount = Math.max(maxSceneLane + 1, minScenePlaceholderRows);
-  const overlayLaneCount = Math.max(maxOverlayLane + 1, minOverlayPlaceholderRows);
+  const minimumTotalLaneCount = Math.max(visibleRowCount, sceneLaneCount + minOverlayPlaceholderRows);
+  const overlayLaneCount = Math.max(maxOverlayLane + 1, minOverlayPlaceholderRows, minimumTotalLaneCount - sceneLaneCount);
   const sceneLanes = Array.from({ length: sceneLaneCount }, (_, lane) => ({
     lane,
     tracks: sceneTracks
@@ -238,7 +271,9 @@ export function EditorTimeline({
               className={`${styles.tracksContent} ${isAssetDropTarget ? styles.tracksContentAssetDropTarget : ""}`}
               style={{ width: timelineContentWidth }}
               onDragOver={(event: DragEvent<HTMLDivElement>) => {
-                if (!event.dataTransfer.types.includes("application/editor-asset-id")) {
+                const hasAssetDrop = event.dataTransfer.types.includes("application/editor-asset-id");
+                const hasElementDrop = event.dataTransfer.types.includes("application/editor-element");
+                if (!hasAssetDrop && !hasElementDrop) {
                   return;
                 }
 
@@ -254,14 +289,28 @@ export function EditorTimeline({
                 }
               }}
               onDrop={(event: DragEvent<HTMLDivElement>) => {
+                const rawElementPayload = event.dataTransfer.getData("application/editor-element");
                 const assetId = event.dataTransfer.getData("application/editor-asset-id");
-                if (!assetId) {
+                event.preventDefault();
+                setIsAssetDropTarget(false);
+
+                if (assetId) {
+                  onDropAssetToTimeline(assetId, event.clientX, event.clientY);
                   return;
                 }
 
-                event.preventDefault();
-                setIsAssetDropTarget(false);
-                onDropAssetToTimeline(assetId, event.clientX, event.clientY);
+                if (!rawElementPayload) {
+                  return;
+                }
+
+                try {
+                  const payload = JSON.parse(rawElementPayload) as TimelineElementDrop;
+                  if (payload.kind === "text" || (payload.kind === "shape" && (payload.shape === "rect" || payload.shape === "circle"))) {
+                    onDropElementToTimeline(payload, event.clientX, event.clientY);
+                  }
+                } catch {
+                  return;
+                }
               }}
             >
               {!hasRenderableTracks ? (

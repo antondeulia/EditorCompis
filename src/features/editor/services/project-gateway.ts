@@ -15,14 +15,6 @@ export type EditorProjectGateway = {
 
 const storageKeyPrefix = "editor-compis:draft:";
 
-function buildSchemaTitleFromSlug(slug: string) {
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(" ");
-}
-
 export const localProjectGateway: EditorProjectGateway = {
   async saveDraft(snapshot) {
     if (typeof window === "undefined") {
@@ -56,11 +48,7 @@ export const localProjectGateway: EditorProjectGateway = {
   createEmptyDraft(slug) {
     return {
       slug,
-      schema: normalizeOverlayTimeline(
-        createEmptyVideoSchema({
-          title: buildSchemaTitleFromSlug(slug) || "Untitled Video",
-        }),
-      ),
+      schema: normalizeOverlayTimeline(createEmptyVideoSchema()),
       updatedAt: new Date().toISOString(),
     };
   },

@@ -120,13 +120,17 @@ export function useEditorSchemaActions({
     [setVideoSchema],
   );
 
-  const addTextTrack = useCallback(() => {
+  const addTextTrack = useCallback((requestedStartFrame?: number, requestedLane?: number) => {
     let nextSelected: string | null = null;
 
     setVideoSchema((prev) => {
       const safeSchema = ensureFallbackScene(prev);
       const targetScene = safeSchema.scenes[0];
-      const globalStart = clamp(currentFrame, 0, Math.max(0, prev.durationInFrames - 1));
+      const globalStart = clamp(
+        Math.round(requestedStartFrame ?? currentFrame),
+        0,
+        Math.max(0, prev.durationInFrames - 1),
+      );
       const duration = Math.max(30, Math.min(180, prev.durationInFrames - globalStart));
       const id = `text-${Date.now().toString(36)}`;
 
@@ -148,6 +152,7 @@ export function useEditorSchemaActions({
                 text: "New text",
                 startFrame: 0,
                 timelineStartFrame: globalStart,
+                timelineLane: requestedLane === undefined ? getNextTimelineLane(safeSchema, targetScene.id) : requestedLane,
                 durationInFrames: duration,
                 x: 120,
                 y: 180,
@@ -171,13 +176,17 @@ export function useEditorSchemaActions({
   }, [currentFrame, setSelectedElementKey, setVideoSchema]);
 
   const addShapeTrack = useCallback(
-    (shape: "rect" | "circle") => {
+    (shape: "rect" | "circle", requestedStartFrame?: number, requestedLane?: number) => {
       let nextSelected: string | null = null;
 
       setVideoSchema((prev) => {
         const safeSchema = ensureFallbackScene(prev);
         const targetScene = safeSchema.scenes[0];
-        const globalStart = clamp(currentFrame, 0, Math.max(0, safeSchema.durationInFrames - 1));
+        const globalStart = clamp(
+          Math.round(requestedStartFrame ?? currentFrame),
+          0,
+          Math.max(0, safeSchema.durationInFrames - 1),
+        );
         const duration = Math.max(30, Math.min(180, safeSchema.durationInFrames - globalStart));
         const id = `shape-${Date.now().toString(36)}`;
 
@@ -200,6 +209,7 @@ export function useEditorSchemaActions({
                   fill: shape === "circle" ? "rgba(59, 130, 246, 0.85)" : "rgba(139, 92, 246, 0.85)",
                   startFrame: 0,
                   timelineStartFrame: globalStart,
+                  timelineLane: requestedLane === undefined ? getNextTimelineLane(safeSchema, targetScene.id) : requestedLane,
                   durationInFrames: duration,
                   x: shape === "circle" ? 380 : 210,
                   y: 520,

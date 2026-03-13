@@ -2,7 +2,7 @@
 
 import { ChangeEvent } from "react";
 import { elementsLibrarySections, rightSidebarSections, RightSidebarSection } from "../../model/constants";
-import { ElementsLibraryIcon } from "../../model/types";
+import { ElementsLibraryIcon, TimelineElementDrop } from "../../model/types";
 import { VideoElement } from "../../model/schema";
 import styles from "../../styles/editor.module.css";
 
@@ -16,6 +16,27 @@ type EditorRightSidebarProps = {
   onAddTextTrack: () => void;
   onAddShapeTrack: (shape: "rect" | "circle") => void;
 };
+
+function getTimelineElementDropPayload(
+  groupTitle: string,
+  item: { label: string; icon?: ElementsLibraryIcon },
+): TimelineElementDrop | null {
+  if (groupTitle === "Text") {
+    return { kind: "text" };
+  }
+
+  if (groupTitle === "Basic") {
+    if (item.icon === "circle-outline" || item.icon === "circle-solid") {
+      return { kind: "shape", shape: "circle" };
+    }
+
+    if (item.icon === "square-outline" || item.icon === "square-solid") {
+      return { kind: "shape", shape: "rect" };
+    }
+  }
+
+  return null;
+}
 
 function renderElementsLibraryIcon(icon: ElementsLibraryIcon) {
   switch (icon) {
@@ -316,41 +337,52 @@ export function EditorRightSidebar({
                       }`}
                     >
                       {group.items.map((item, index) => (
-                        <button
-                          key={`${group.title}-${item.label || item.icon || index}`}
-                          type="button"
-                          className={styles.elementsLibraryCard}
-                          onClick={() => {
-                            if (group.title === "Text") {
-                              onAddTextTrack();
-                              return;
-                            }
+                        (() => {
+                          const dropPayload = getTimelineElementDropPayload(group.title, item);
 
-                            if (group.title === "Basic") {
-                              if (item.icon === "circle-outline" || item.icon === "circle-solid") {
-                                onAddShapeTrack("circle");
-                                return;
-                              }
-                              if (item.icon === "square-outline" || item.icon === "square-solid") {
-                                onAddShapeTrack("rect");
-                                return;
-                              }
-                            }
-                          }}
-                        >
-                          {item.icon ? (
-                            <span className={styles.elementsLibraryCardIcon}>{renderElementsLibraryIcon(item.icon)}</span>
-                          ) : null}
-                          {item.label ? (
-                            <span
-                              className={`${styles.elementsLibraryCardLabel} ${
-                                item.emphasis ? styles.elementsLibraryCardLabelEmphasis : ""
-                              }`}
+                          return (
+                            <button
+                              key={`${group.title}-${item.label || item.icon || index}`}
+                              type="button"
+                              className={styles.elementsLibraryCard}
+                              draggable={dropPayload !== null}
+                              onDragStart={(event) => {
+                                if (!dropPayload) {
+                                  return;
+                                }
+
+                                event.dataTransfer.effectAllowed = "copy";
+                                event.dataTransfer.setData(
+                                  "application/editor-element",
+                                  JSON.stringify(dropPayload),
+                                );
+                              }}
+                              onClick={() => {
+                                if (dropPayload?.kind === "text") {
+                                  onAddTextTrack();
+                                  return;
+                                }
+
+                                if (dropPayload?.kind === "shape") {
+                                  onAddShapeTrack(dropPayload.shape);
+                                }
+                              }}
                             >
-                              {item.label}
-                            </span>
-                          ) : null}
-                        </button>
+                              {item.icon ? (
+                                <span className={styles.elementsLibraryCardIcon}>{renderElementsLibraryIcon(item.icon)}</span>
+                              ) : null}
+                              {item.label ? (
+                                <span
+                                  className={`${styles.elementsLibraryCardLabel} ${
+                                    item.emphasis ? styles.elementsLibraryCardLabelEmphasis : ""
+                                  }`}
+                                >
+                                  {item.label}
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })()
                       ))}
                     </div>
                   </section>
