@@ -1,141 +1,333 @@
 .page {
-  --background: #fafafa;
-  --foreground: #fff;
-
-  --text-primary: #000;
-  --text-secondary: #666;
-
-  --button-primary-hover: #383838;
-  --button-secondary-hover: #f2f2f2;
-  --button-secondary-border: #ebebeb;
-
-  display: flex;
-  min-height: 100vh;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-geist-sans);
-  background-color: var(--background);
-}
-
-.main {
-  display: flex;
-  min-height: 100vh;
-  width: 100%;
-  max-width: 800px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  background-color: var(--foreground);
-  padding: 120px 60px;
-}
-
-.intro {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  gap: 24px;
-}
-
-.intro h1 {
-  max-width: 320px;
-  font-size: 40px;
-  font-weight: 600;
-  line-height: 48px;
-  letter-spacing: -2.4px;
-  text-wrap: balance;
-  color: var(--text-primary);
-}
-
-.intro p {
-  max-width: 440px;
-  font-size: 18px;
-  line-height: 32px;
-  text-wrap: balance;
-  color: var(--text-secondary);
-}
-
-.intro a {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.ctas {
   display: flex;
   flex-direction: row;
-  width: 100%;
-  max-width: 440px;
-  gap: 16px;
-  font-size: 14px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
 }
 
-.ctas a {
+.leftRail {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 128px;
-  border: 1px solid transparent;
-  transition: 0.2s;
-  cursor: pointer;
-  width: fit-content;
-  font-weight: 500;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  height: 100vh;
+  min-height: 100vh;
+  min-width: 72px;
+  flex-shrink: 0;
 }
 
-a.primary {
-  background: var(--text-primary);
-  color: var(--background);
+.sidebar {
+  width: 72px;
+  min-width: 72px;
+  height: 100vh;
+  min-height: 100vh;
+  padding: 12px 0;
+  border-right: 1px solid #d4d4d4;
+  background: #f3f3f3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebarItem {
+  width: 62px;
+  min-height: 70px;
+  padding: 7px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #334054;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.sidebarItem:hover {
+  background: #e4e9f2;
+  color: #152136;
+}
+
+.sidebarItemActive {
+  background: #d7e3f5;
+  color: #111d31;
+}
+
+.sidebarIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #4b5f7d;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+}
+
+.sidebarLabel {
+  max-width: 100%;
+  font-size: 9px;
+  line-height: 1.05;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.editorContent {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.toolPanel {
+  width: 300px;
+  min-width: 300px;
+  max-width: 300px;
+  height: 100vh;
+  min-height: 100vh;
+  padding: 14px 12px;
+  border-right: 1px solid #d4d4d4;
+  background: #f8f9fb;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toolPanelTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2a3d;
+}
+
+.toolPanelText {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #37465f;
+}
+
+.chatThread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.chatMessage,
+.chatMessageAssistant {
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.chatMessage {
+  background: #e9edf5;
+  color: #1b2a40;
+}
+
+.chatMessageAssistant {
+  background: #d9ebff;
+  color: #113153;
+}
+
+.chatInput {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #c8d2e0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.primaryAction {
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f80ff;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryAction {
+  height: 36px;
+  border: 1px solid #c2cfdf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2a3d;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryAction:hover {
+  background: #f4f7fc;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.dropzone {
+  border: 2px dashed #bdcadf;
+  border-radius: 10px;
+  min-height: 86px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  color: #41516b;
+  background: #f2f6fd;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.dropzoneActive {
+  border-color: #2f80ff;
+  background: #e7f1ff;
+}
+
+.assetList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.assetCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid #ced7e5;
+  border-radius: 8px;
+  background: #ffffff;
+  min-height: 62px;
+}
+
+.assetPreview {
+  width: 68px;
+  height: 46px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #0f131b;
+}
+
+.assetPreviewPlaceholder {
+  width: 68px;
+  height: 46px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d9e1ef;
+  color: #425371;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.assetMeta {
+  min-width: 0;
+}
+
+.assetName {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2a3d;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.assetInfo {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #51617c;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.assetEmpty {
+  padding: 12px;
+  border: 1px dashed #c6d2e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #41516b;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.assetCardDraggable {
+  cursor: grab;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.assetCardDraggable:hover {
+  border-color: #9fb3d4;
+  box-shadow: 0 4px 12px rgb(22 43 72 / 12%);
+}
+
+.assetCardDraggable:active {
+  cursor: grabbing;
+}
+
+.jsonActionRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-a.secondary {
-  border-color: var(--button-secondary-border);
+.jsonEditor {
+  width: 100%;
+  flex: 1;
+  min-height: 260px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #c8d2e0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2a3d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
 }
 
-/* Enable hover only on non-touch devices */
-@media (hover: hover) and (pointer: fine) {
-  a.primary:hover {
-    background: var(--button-primary-hover);
-    border-color: transparent;
-  }
-
-  a.secondary:hover {
-    background: var(--button-secondary-hover);
-    border-color: transparent;
-  }
+.jsonStatus {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #e7f1ff;
+  color: #123a6b;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
-@media (max-width: 600px) {
-  .main {
-    padding: 48px 24px;
-  }
 
-  .intro {
-    gap: 16px;
-  }
 
-  .intro h1 {
-    font-size: 32px;
-    line-height: 40px;
-    letter-spacing: -1.92px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .logo {
-    filter: invert();
-  }
-
-  .page {
-    --background: #000;
-    --foreground: #000;
-
-    --text-primary: #ededed;
-    --text-secondary: #999;
-
-    --button-primary-hover: #ccc;
-    --button-secondary-hover: #1a1a1a;
-    --button-secondary-border: #1a1a1a;
-  }
-}
