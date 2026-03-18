@@ -437,9 +437,12 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, rgb(0 0 0 / 0%) 22%, rgb(0 0 0 / 35%) 100%);
   pointer-events: none;
   z-index: 1;
+}
+
+.previewViewportCheckerboard::after {
+  background: rgb(0 0 0 / 16%);
 }
 
 
@@ -555,3 +558,4 @@
   box-shadow: 0 0 0 1px rgb(14 32 57 / 14%);
   cursor: nwse-resize;
 }
+

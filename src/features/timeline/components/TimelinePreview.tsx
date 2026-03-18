@@ -425,7 +425,6 @@ export const TimelinePreview = ({
           </>
         ) : (
           <div className={styles.previewVideoFrame}>
-            <div className={styles.previewCanvasPlaceholder}>Drop elements or text here</div>
             <div className={styles.previewOverlayLayer}>
               {activePreviewClips.map(({ clip, trackIndex }) => {
                 const layout = getPreviewLayout(clip);
