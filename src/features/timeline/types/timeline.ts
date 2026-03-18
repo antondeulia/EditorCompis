@@ -7,6 +7,10 @@ export interface TimelineClip {
   durationFrames: number;
   source?: "timeline" | "asset" | "element";
   mediaUrl?: string;
+  previewX?: number;
+  previewY?: number;
+  previewWidth?: number;
+  previewHeight?: number;
 }
 
 export interface TimelineTrack {

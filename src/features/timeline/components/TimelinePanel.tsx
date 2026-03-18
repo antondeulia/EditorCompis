@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   DragEvent as ReactDragEvent,
@@ -13,7 +13,7 @@ import {
 import {
   SidebarTimelineItem,
   clearCurrentTimelineDragItem,
-  getCurrentTimelineDragItem,
+  parseTimelineDragItemFromDataTransfer,
 } from "@/features/timeline/lib/dragTransfer";
 import { TIMELINE_LAYOUT } from "@/features/timeline/constants/timelineLayout";
 import {
@@ -60,7 +60,6 @@ export interface TimelineExternalPreview {
   mediaUrl?: string;
 }
 
-const TIMELINE_DRAG_MIME = "application/x-timeline-item";
 const MIN_CLIP_DURATION_FRAMES = 6;
 const SNAP_THRESHOLD_PX = 10;
 const RESIZE_HIT_ZONE_HEIGHT_PX = 8;
@@ -80,6 +79,52 @@ const clamp = (value: number, min: number, max: number) => {
   return value;
 };
 
+const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
+  if (typeof item.previewX === "number" && typeof item.previewY === "number" && typeof item.previewWidth === "number" && typeof item.previewHeight === "number") {
+    return {
+      previewX: clamp(item.previewX, 0, 0.92),
+      previewY: clamp(item.previewY, 0, 0.92),
+      previewWidth: clamp(item.previewWidth, 0.08, 1),
+      previewHeight: clamp(item.previewHeight, 0.08, 1),
+    };
+  }
+
+  if (item.source === "asset" && item.mediaType === "video") {
+    return {
+      previewX: 0,
+      previewY: 0,
+      previewWidth: 1,
+      previewHeight: 1,
+    };
+  }
+
+  const loweredLabel = item.label.toLowerCase();
+
+  if (loweredLabel.includes("subtitle")) {
+    return {
+      previewX: 0.1,
+      previewY: 0.78,
+      previewWidth: 0.8,
+      previewHeight: 0.14,
+    };
+  }
+
+  if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
+    return {
+      previewX: 0.1,
+      previewY: 0.08,
+      previewWidth: 0.8,
+      previewHeight: 0.2,
+    };
+  }
+
+  return {
+    previewX: 0.2,
+    previewY: 0.2,
+    previewWidth: 0.6,
+    previewHeight: 0.22,
+  };
+};
 const collectSnapFrames = (
   tracks: TimelineTrack[],
   sequenceDurationFrames: number,
@@ -158,37 +203,7 @@ const updateTracksForDrop = (
 
 const parseExternalDropItem = (
   event: ReactDragEvent<HTMLDivElement>,
-): SidebarTimelineItem | null => {
-  const payload = event.dataTransfer.getData(TIMELINE_DRAG_MIME);
-
-  if (!payload) {
-    return getCurrentTimelineDragItem();
-  }
-
-  try {
-    const parsed = JSON.parse(payload) as Partial<SidebarTimelineItem>;
-
-    if (
-      typeof parsed.label !== "string" ||
-      (parsed.mediaType !== "video" && parsed.mediaType !== "audio") ||
-      typeof parsed.durationFrames !== "number" ||
-      (parsed.source !== "asset" && parsed.source !== "element") ||
-      (parsed.mediaUrl !== undefined && typeof parsed.mediaUrl !== "string")
-    ) {
-      return getCurrentTimelineDragItem();
-    }
-
-    return {
-      label: parsed.label,
-      mediaType: parsed.mediaType,
-      durationFrames: parsed.durationFrames,
-      source: parsed.source,
-      mediaUrl: parsed.mediaUrl,
-    };
-  } catch {
-    return getCurrentTimelineDragItem();
-  }
-};
+): SidebarTimelineItem | null => parseTimelineDragItemFromDataTransfer(event.dataTransfer);
 
 export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps) => {
   const [tracks, setTracks] = useState<TimelineTrack[]>(sequence.tracks);
@@ -757,6 +772,8 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       );
       const startFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
 
+      const previewDefaults = getPreviewDefaultsForItem(draggedItem);
+
       const droppedClip: TimelineClip = {
         id: `clip-drop-${crypto.randomUUID()}`,
         name: draggedItem.label,
@@ -764,6 +781,10 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         durationFrames: clipDurationFrames,
         source: draggedItem.source,
         mediaUrl: draggedItem.mediaUrl,
+        previewX: previewDefaults.previewX,
+        previewY: previewDefaults.previewY,
+        previewWidth: previewDefaults.previewWidth,
+        previewHeight: previewDefaults.previewHeight,
       };
 
       setTracks((currentTracks) => {
@@ -794,6 +815,99 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     [framePixelRatio, sequence.durationFrames, tracks],
   );
 
+  const handlePreviewClipSelect = useCallback((clipId: string | null) => {
+    if (!clipId) {
+      setSelectedClipIds([]);
+      setLastSelectedClipId(null);
+      return;
+    }
+
+    setSelectedClipIds([clipId]);
+    setLastSelectedClipId(clipId);
+  }, []);
+
+  const handlePreviewClipTransformChange = useCallback(
+    (
+      clipId: string,
+      nextTransform: Pick<TimelineClip, "previewX" | "previewY" | "previewWidth" | "previewHeight">,
+    ) => {
+      setTracks((currentTracks) =>
+        currentTracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            clip.id === clipId
+              ? {
+                  ...clip,
+                  previewX: clamp(nextTransform.previewX ?? clip.previewX ?? 0, 0, 0.92),
+                  previewY: clamp(nextTransform.previewY ?? clip.previewY ?? 0, 0, 0.92),
+                  previewWidth: clamp(nextTransform.previewWidth ?? clip.previewWidth ?? 0.6, 0.08, 1),
+                  previewHeight: clamp(nextTransform.previewHeight ?? clip.previewHeight ?? 0.22, 0.08, 1),
+                }
+              : clip,
+          ),
+        })),
+      );
+    },
+    [],
+  );
+
+  const handlePreviewExternalDrop = useCallback(
+    (draggedItem: SidebarTimelineItem) => {
+      const targetTrackIndex = tracks.findIndex((track) => track.type === draggedItem.mediaType);
+      if (targetTrackIndex < 0) {
+        clearCurrentTimelineDragItem();
+        return;
+      }
+
+      const clipDurationFrames = clamp(
+        Math.round(draggedItem.durationFrames),
+        MIN_CLIP_DURATION_FRAMES,
+        sequence.durationFrames,
+      );
+      const maxStartFrame = Math.max(sequence.durationFrames - clipDurationFrames, 0);
+      const rawStartFrame = clamp(Math.round(currentFrame), 0, maxStartFrame);
+      const snapFrames = collectSnapFrames(tracks, sequence.durationFrames, new Set());
+      const thresholdFrames = SNAP_THRESHOLD_PX / framePixelRatio;
+      const snap = getBestSnap(
+        [rawStartFrame, rawStartFrame + clipDurationFrames],
+        snapFrames,
+        thresholdFrames,
+      );
+      const startFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
+      const previewDefaults = getPreviewDefaultsForItem(draggedItem);
+
+      const droppedClip: TimelineClip = {
+        id: `clip-drop-${crypto.randomUUID()}`,
+        name: draggedItem.label,
+        startFrame,
+        durationFrames: clipDurationFrames,
+        source: draggedItem.source,
+        mediaUrl: draggedItem.mediaUrl,
+        previewX: previewDefaults.previewX,
+        previewY: previewDefaults.previewY,
+        previewWidth: previewDefaults.previewWidth,
+        previewHeight: previewDefaults.previewHeight,
+      };
+
+      setTracks((currentTracks) =>
+        currentTracks.map((track, index) => {
+          if (index !== targetTrackIndex) {
+            return track;
+          }
+
+          return {
+            ...track,
+            clips: [...track.clips, droppedClip].sort((a, b) => a.startFrame - b.startFrame),
+          };
+        }),
+      );
+
+      setSelectedClipIds([droppedClip.id]);
+      setLastSelectedClipId(droppedClip.id);
+      clearCurrentTimelineDragItem();
+    },
+    [currentFrame, framePixelRatio, sequence.durationFrames, tracks],
+  );
   const handleWindowPointerMove = useCallback(
     (event: PointerEvent) => {
       if (isScrubbing) {
@@ -964,6 +1078,10 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         currentFrame={currentFrame}
         frameRate={sequence.frameRate}
         isPlaying={isPlaying}
+        selectedClipIds={selectedClipIds}
+        onSelectClip={handlePreviewClipSelect}
+        onClipTransformChange={handlePreviewClipTransformChange}
+        onDropExternalItem={handlePreviewExternalDrop}
       />
 
       <TimelineToolbar

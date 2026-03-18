@@ -19,7 +19,6 @@ const sidebarItems = [
   { id: "ai-tools", icon: "T", label: "AI Tools" },
   { id: "elements", icon: "El", label: "Elements" },
   { id: "text", icon: "Tx", label: "Text" },
-  { id: "media", icon: "M", label: "Media" },
   { id: "json", icon: "{}", label: "JSON" },
 ];
 
@@ -33,11 +32,167 @@ interface AssetItem {
   durationSeconds: number | null;
 }
 
-const elementItems: SidebarTimelineItem[] = [
-  { label: "Lower Third", mediaType: "video", durationFrames: 30 * 6, source: "element" },
-  { label: "Callout Bubble", mediaType: "video", durationFrames: 30 * 5, source: "element" },
-  { label: "Progress Bar", mediaType: "video", durationFrames: 30 * 8, source: "element" },
-  { label: "Split Screen", mediaType: "video", durationFrames: 30 * 10, source: "element" },
+interface SidebarLibraryItem {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  dragItem: SidebarTimelineItem;
+}
+
+interface SidebarLibrarySection {
+  id: string;
+  title: string;
+  items: SidebarLibraryItem[];
+}
+
+const elementSections: SidebarLibrarySection[] = [
+  {
+    id: "shapes",
+    title: "Shapes",
+    items: [
+      {
+        id: "shape-rect",
+        icon: "[]",
+        title: "Solid Rectangle",
+        description: "Чистый блок для плашек, масок и акцентов.",
+        dragItem: { label: "Solid Rectangle", mediaType: "video", durationFrames: 30 * 6, source: "element" },
+      },
+      {
+        id: "shape-circle",
+        icon: "()",
+        title: "Circle Pulse",
+        description: "Круглый акцент для указания фокуса.",
+        dragItem: { label: "Circle Pulse", mediaType: "video", durationFrames: 30 * 5, source: "element" },
+      },
+      {
+        id: "shape-triangle",
+        icon: "/\\",
+        title: "Triangle Marker",
+        description: "Направляющая фигура для инфографики.",
+        dragItem: { label: "Triangle Marker", mediaType: "video", durationFrames: 30 * 5, source: "element" },
+      },
+      {
+        id: "shape-line",
+        icon: "--",
+        title: "Line Accent",
+        description: "Линейный разделитель для титров и карточек.",
+        dragItem: { label: "Line Accent", mediaType: "video", durationFrames: 30 * 4, source: "element" },
+      },
+    ],
+  },
+  {
+    id: "motion-pack",
+    title: "Motion Elements",
+    items: [
+      {
+        id: "element-lower-third",
+        icon: "LT",
+        title: "Lower Third Pro",
+        description: "Современная нижняя плашка с местом под имя/роль.",
+        dragItem: { label: "Lower Third Pro", mediaType: "video", durationFrames: 30 * 6, source: "element" },
+      },
+      {
+        id: "element-callout",
+        icon: "!",
+        title: "Callout Bubble",
+        description: "Выноска для подсказок и UI-демо.",
+        dragItem: { label: "Callout Bubble", mediaType: "video", durationFrames: 30 * 5, source: "element" },
+      },
+      {
+        id: "element-progress",
+        icon: "==",
+        title: "Progress Bar",
+        description: "Таймер/прогресс для сторителлинга.",
+        dragItem: { label: "Progress Bar", mediaType: "video", durationFrames: 30 * 8, source: "element" },
+      },
+      {
+        id: "element-split",
+        icon: "||",
+        title: "Split Screen",
+        description: "Двухколоночная композиция для сравнения.",
+        dragItem: { label: "Split Screen", mediaType: "video", durationFrames: 30 * 10, source: "element" },
+      },
+      {
+        id: "element-arrow",
+        icon: "->",
+        title: "Arrow Swipe",
+        description: "Динамическая стрелка для направления внимания.",
+        dragItem: { label: "Arrow Swipe", mediaType: "video", durationFrames: 30 * 4, source: "element" },
+      },
+      {
+        id: "element-burst",
+        icon: "**",
+        title: "Star Burst",
+        description: "Взрывной бейдж для акций, скидок, CTA.",
+        dragItem: { label: "Star Burst", mediaType: "video", durationFrames: 30 * 4, source: "element" },
+      },
+    ],
+  },
+];
+
+const textSections: SidebarLibrarySection[] = [
+  {
+    id: "headings",
+    title: "Headings",
+    items: [
+      {
+        id: "text-h1",
+        icon: "H1",
+        title: "Hero Title (H1)",
+        description: "Главный крупный заголовок сцены.",
+        dragItem: { label: "Hero Title (H1)", mediaType: "video", durationFrames: 30 * 6, source: "element" },
+      },
+      {
+        id: "text-h2",
+        icon: "H2",
+        title: "Section Title (H2)",
+        description: "Заголовок блока или новой темы.",
+        dragItem: { label: "Section Title (H2)", mediaType: "video", durationFrames: 30 * 6, source: "element" },
+      },
+      {
+        id: "text-h3",
+        icon: "H3",
+        title: "Topic Header (H3)",
+        description: "Подзаголовок для тезисов и пунктов.",
+        dragItem: { label: "Topic Header (H3)", mediaType: "video", durationFrames: 30 * 5, source: "element" },
+      },
+    ],
+  },
+  {
+    id: "captions",
+    title: "Captions & Body",
+    items: [
+      {
+        id: "text-subtitle",
+        icon: "CC",
+        title: "Subtitle",
+        description: "Субтитры в нижней безопасной зоне.",
+        dragItem: { label: "Subtitle", mediaType: "video", durationFrames: 30 * 4, source: "element" },
+      },
+      {
+        id: "text-description",
+        icon: "DS",
+        title: "Description",
+        description: "Описание/пояснение под заголовком.",
+        dragItem: { label: "Description", mediaType: "video", durationFrames: 30 * 7, source: "element" },
+      },
+      {
+        id: "text-body",
+        icon: "Tx",
+        title: "Body Text",
+        description: "Основной текст для карточек и сцен.",
+        dragItem: { label: "Body Text", mediaType: "video", durationFrames: 30 * 8, source: "element" },
+      },
+      {
+        id: "text-quote",
+        icon: "\"\"",
+        title: "Quote Block",
+        description: "Цитата с акцентной типографикой.",
+        dragItem: { label: "Quote Block", mediaType: "video", durationFrames: 30 * 8, source: "element" },
+      },
+    ],
+  },
 ];
 
 const inferMediaTypeFromAsset = (file: File): "video" | "audio" => {
@@ -71,6 +226,11 @@ const formatFileSize = (sizeInBytes: number) => {
   }
 
   return `${(sizeInBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+};
+
+const formatDurationFromFrames = (durationFrames: number, fps = 30) => {
+  const seconds = Math.max(durationFrames / fps, 0.2);
+  return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
 };
 
 const isTimelineSequence = (value: unknown): value is TimelineSequence => {
@@ -451,18 +611,74 @@ export default function Home() {
       return (
         <>
           <h2 className={styles.toolPanelTitle}>Elements</h2>
+          <p className={styles.libraryIntro}>Drag any element straight to the video track.</p>
           <div className={styles.assetList}>
-            {elementItems.map((item) => (
-              <div
-                key={item.label}
-                className={`${styles.assetCard} ${styles.assetCardDraggable}`}
-                draggable
-                onDragStart={(event) => handleTimelineItemDragStart(event, item)}
-                onDragEnd={handleTimelineItemDragEnd}
-                title="Drag to timeline"
-              >
-                {item.label}
-              </div>
+            {elementSections.map((section) => (
+              <section key={section.id} className={styles.librarySection}>
+                <h3 className={styles.librarySectionTitle}>{section.title}</h3>
+                <div className={styles.libraryGrid}>
+                  {section.items.map((item) => (
+                    <article
+                      key={item.id}
+                      className={styles.libraryCard}
+                      draggable
+                      onDragStart={(event) => handleTimelineItemDragStart(event, item.dragItem)}
+                      onDragEnd={handleTimelineItemDragEnd}
+                      title="Drag to timeline"
+                    >
+                      <span className={styles.libraryCardIcon} aria-hidden="true">
+                        {item.icon}
+                      </span>
+                      <div className={styles.libraryCardBody}>
+                        <p className={styles.libraryCardTitle}>{item.title}</p>
+                        <p className={styles.libraryCardDescription}>{item.description}</p>
+                      </div>
+                      <span className={styles.libraryCardMeta}>
+                        {formatDurationFromFrames(item.dragItem.durationFrames)}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (activeItem.id === "text") {
+      return (
+        <>
+          <h2 className={styles.toolPanelTitle}>Text</h2>
+          <p className={styles.libraryIntro}>Готовые типографические пресеты: от H1 до subtitle и body.</p>
+          <div className={styles.assetList}>
+            {textSections.map((section) => (
+              <section key={section.id} className={styles.librarySection}>
+                <h3 className={styles.librarySectionTitle}>{section.title}</h3>
+                <div className={styles.libraryGrid}>
+                  {section.items.map((item) => (
+                    <article
+                      key={item.id}
+                      className={styles.libraryCard}
+                      draggable
+                      onDragStart={(event) => handleTimelineItemDragStart(event, item.dragItem)}
+                      onDragEnd={handleTimelineItemDragEnd}
+                      title="Drag to timeline"
+                    >
+                      <span className={styles.libraryCardIcon} aria-hidden="true">
+                        {item.icon}
+                      </span>
+                      <div className={styles.libraryCardBody}>
+                        <p className={styles.libraryCardTitle}>{item.title}</p>
+                        <p className={styles.libraryCardDescription}>{item.description}</p>
+                      </div>
+                      <span className={styles.libraryCardMeta}>
+                        {formatDurationFromFrames(item.dragItem.durationFrames)}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         </>
