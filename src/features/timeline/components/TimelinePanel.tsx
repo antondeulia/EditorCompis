@@ -104,71 +104,71 @@ const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
   if (isTextPreset) {
     if (loweredLabel.includes("subtitle")) {
       return {
-        previewX: 0.22,
+        previewX: 0.26,
         previewY: 0.78,
-        previewWidth: 0.56,
-        previewHeight: 0.13,
+        previewWidth: 0.48,
+        previewHeight: 0.11,
       };
     }
 
     if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
       return {
-        previewX: 0.25,
+        previewX: 0.28,
         previewY: 0.1,
-        previewWidth: 0.5,
-        previewHeight: 0.16,
+        previewWidth: 0.44,
+        previewHeight: 0.14,
       };
     }
 
     if (loweredLabel.includes("h2") || loweredLabel.includes("h3") || loweredLabel.includes("header")) {
       return {
-        previewX: 0.27,
+        previewX: 0.3,
         previewY: 0.18,
-        previewWidth: 0.46,
-        previewHeight: 0.14,
+        previewWidth: 0.4,
+        previewHeight: 0.12,
       };
     }
 
     return {
-      previewX: 0.24,
+      previewX: 0.28,
       previewY: 0.3,
-      previewWidth: 0.52,
-      previewHeight: 0.18,
+      previewWidth: 0.44,
+      previewHeight: 0.16,
     };
   }
 
   if (loweredLabel.includes("circle")) {
     return {
-      previewX: 0.37,
-      previewY: 0.3,
-      previewWidth: 0.26,
-      previewHeight: 0.26,
+      previewX: 0.39,
+      previewY: 0.32,
+      previewWidth: 0.22,
+      previewHeight: 0.22,
     };
   }
 
   if (loweredLabel.includes("triangle")) {
     return {
-      previewX: 0.33,
-      previewY: 0.34,
-      previewWidth: 0.34,
-      previewHeight: 0.26,
+      previewX: 0.35,
+      previewY: 0.36,
+      previewWidth: 0.3,
+      previewHeight: 0.22,
     };
   }
 
   if (loweredLabel.includes("line")) {
     return {
-      previewX: 0.22,
-      previewY: 0.46,
-      previewWidth: 0.56,
-      previewHeight: 0.08,
+      previewX: 0.25,
+      previewY: 0.47,
+      previewWidth: 0.5,
+      previewHeight: 0.07,
     };
   }
 
   return {
-    previewX: 0.3,
-    previewY: 0.28,
-    previewWidth: 0.4,
-    previewHeight: 0.24,
+    previewX: 0.33,
+    previewY: 0.3,
+    previewWidth: 0.34,
+    previewHeight: 0.2,
   };
 };
 const collectSnapFrames = (
@@ -1211,6 +1211,8 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     </section>
   );
 };
+
+
 
 
 

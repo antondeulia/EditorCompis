@@ -173,6 +173,11 @@
   cursor: pointer;
 }
 
+.primaryAction:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .secondaryAction {
   height: 36px;
   border: 1px solid #c2cfdf;
@@ -431,6 +436,7 @@
   font-size: 12px;
   line-height: 1.35;
 }
+
 
 
 

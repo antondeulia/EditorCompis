@@ -1,6 +1,7 @@
 import {
   DragEvent as ReactDragEvent,
   PointerEvent as ReactPointerEvent,
+  SyntheticEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -34,6 +35,14 @@ interface TimelinePreviewProps {
 interface ActivePreviewClip {
   clip: TimelineClip;
   trackIndex: number;
+  trackType: TimelineTrack["type"];
+}
+
+interface PreviewLayout {
+  previewX: number;
+  previewY: number;
+  previewWidth: number;
+  previewHeight: number;
 }
 
 type PreviewInteractionMode = "move" | "resize";
@@ -86,7 +95,7 @@ const getResizeCursor = (handle?: ResizeHandle) => {
   }
 };
 
-const getPreviewLayout = (clip: TimelineClip) => {
+const getPreviewLayout = (clip: TimelineClip): PreviewLayout => {
   const hasExplicitLayout =
     typeof clip.previewX === "number" &&
     typeof clip.previewY === "number" &&
@@ -123,13 +132,13 @@ const collectActivePreviewClips = (tracks: TimelineTrack[], frame: number): Acti
   const activeClips: ActivePreviewClip[] = [];
 
   tracks.forEach((track, trackIndex) => {
-    if (track.type !== "video") {
+    if (track.type !== "video" && track.type !== "subtitle") {
       return;
     }
 
     for (const clip of track.clips) {
       if (frame >= clip.startFrame && frame < clip.startFrame + clip.durationFrames) {
-        activeClips.push({ clip, trackIndex });
+        activeClips.push({ clip, trackIndex, trackType: track.type });
       }
     }
   });
@@ -161,6 +170,15 @@ const getElementVariant = (name: string): "text" | "circle" | "triangle" | "line
 
 const getTextLabel = (name: string) => name.replace(/\s*\(h\d\)/i, "").trim();
 
+const isFullFrameLayout = (layout: PreviewLayout) => {
+  return (
+    layout.previewX <= 0.001 &&
+    layout.previewY <= 0.001 &&
+    layout.previewWidth >= 0.999 &&
+    layout.previewHeight >= 0.999
+  );
+};
+
 export const TimelinePreview = ({
   tracks,
   currentFrame,
@@ -173,10 +191,11 @@ export const TimelinePreview = ({
 }: TimelinePreviewProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
-  const backdropVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [interactionState, setInteractionState] = useState<PreviewInteractionState | null>(null);
+  const [viewportAspect, setViewportAspect] = useState(16 / 9);
+  const [activeVideoAspect, setActiveVideoAspect] = useState<number | null>(null);
 
   const activePreviewClips = useMemo(
     () => collectActivePreviewClips(tracks, currentFrame),
@@ -189,21 +208,6 @@ export const TimelinePreview = ({
   );
 
   const hasActiveVideo = Boolean(activeVideo?.clip.mediaUrl);
-  const hasFullFrameBackground = useMemo(() => {
-    return activePreviewClips.some(({ clip }) => {
-      if (!clip.mediaUrl) {
-        return false;
-      }
-
-      const layout = getPreviewLayout(clip);
-      return (
-        layout.previewX <= 0.001 &&
-        layout.previewY <= 0.001 &&
-        layout.previewWidth >= 0.999 &&
-        layout.previewHeight >= 0.999
-      );
-    });
-  }, [activePreviewClips]);
 
   const relativeSeconds = useMemo(() => {
     if (!activeVideo) {
@@ -214,7 +218,32 @@ export const TimelinePreview = ({
   }, [activeVideo, currentFrame, frameRate]);
 
   useEffect(() => {
-    const videoElements = [mainVideoRef.current, backdropVideoRef.current].filter(
+    const viewportElement = viewportRef.current;
+    if (!viewportElement) {
+      return;
+    }
+
+    const updateViewportAspect = () => {
+      const rect = viewportElement.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setViewportAspect(rect.width / rect.height);
+      }
+    };
+
+    updateViewportAspect();
+
+    const observer = new ResizeObserver(() => {
+      updateViewportAspect();
+    });
+
+    observer.observe(viewportElement);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [] );
+  useEffect(() => {
+    const videoElements = [mainVideoRef.current].filter(
       (video): video is HTMLVideoElement => video !== null,
     );
 
@@ -237,7 +266,7 @@ export const TimelinePreview = ({
   }, [activeVideo?.clip.id, activeVideo?.clip.mediaUrl, isPlaying]);
 
   useEffect(() => {
-    const videoElements = [mainVideoRef.current, backdropVideoRef.current].filter(
+    const videoElements = [mainVideoRef.current].filter(
       (video): video is HTMLVideoElement => video !== null,
     );
 
@@ -345,6 +374,13 @@ export const TimelinePreview = ({
     };
   }, [interactionState, onClipTransformChange]);
 
+  const handleMainVideoMetadata = useCallback((event: SyntheticEvent<HTMLVideoElement>) => {
+    const videoElement = event.currentTarget;
+    if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+      setActiveVideoAspect(videoElement.videoWidth / videoElement.videoHeight);
+    }
+  }, []);
+
   const handlePreviewDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
     const draggedItem = parseTimelineDragItemFromDataTransfer(event.dataTransfer);
     if (!draggedItem) {
@@ -429,16 +465,24 @@ export const TimelinePreview = ({
 
   const handleViewportPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.target === event.currentTarget) {
-        onSelectClip(null);
+      const target = event.target;
+
+      if (target instanceof Element && target.closest(`.${styles.previewOverlayItem}`)) {
+        return;
       }
+
+      onSelectClip(null);
     },
     [onSelectClip],
   );
 
-  const renderElementContent = useCallback((clip: TimelineClip) => {
+  const renderElementContent = useCallback((clip: TimelineClip, trackType: TimelineTrack["type"]) => {
     if (clip.source !== "element") {
       return null;
+    }
+
+    if (trackType === "subtitle") {
+      return <span className={styles.previewSubtitleText}>{getTextLabel(clip.name)}</span>;
     }
 
     const variant = getElementVariant(clip.name);
@@ -462,9 +506,41 @@ export const TimelinePreview = ({
     return <div className={styles.previewElementShape} aria-hidden="true" />;
   }, []);
 
+  const getRenderedLayout = useCallback(
+    (clip: TimelineClip, baseLayout: PreviewLayout): PreviewLayout => {
+      if (!clip.mediaUrl || !activeVideo || clip.id !== activeVideo.clip.id || !activeVideoAspect) {
+        return baseLayout;
+      }
+
+      if (!isFullFrameLayout(baseLayout) || viewportAspect <= 0) {
+        return baseLayout;
+      }
+
+      if (activeVideoAspect > viewportAspect) {
+        const fittedHeight = viewportAspect / activeVideoAspect;
+        return {
+          previewX: 0,
+          previewY: (1 - fittedHeight) / 2,
+          previewWidth: 1,
+          previewHeight: fittedHeight,
+        };
+      }
+
+      const fittedWidth = activeVideoAspect / viewportAspect;
+      return {
+        previewX: (1 - fittedWidth) / 2,
+        previewY: 0,
+        previewWidth: fittedWidth,
+        previewHeight: 1,
+      };
+    },
+    [activeVideo, activeVideoAspect, viewportAspect],
+  );
+
   const renderOverlayItem = useCallback(
-    ({ clip, trackIndex }: ActivePreviewClip) => {
-      const layout = getPreviewLayout(clip);
+    ({ clip, trackIndex, trackType }: ActivePreviewClip) => {
+      const baseLayout = getPreviewLayout(clip);
+      const layout = getRenderedLayout(clip, baseLayout);
       const isSelected = selectedClipIds.includes(clip.id);
       const isInteractive = interactionState?.clipId === clip.id;
 
@@ -481,21 +557,23 @@ export const TimelinePreview = ({
           }}
           onPointerDown={(event) => startMoveInteraction(event, clip)}
         >
-          <div className={styles.previewElementContent}>{renderElementContent(clip)}</div>
+          <div className={styles.previewElementContent}>{renderElementContent(clip, trackType)}</div>
 
-          {RESIZE_HANDLES.map((handle) => (
-            <button
-              key={`${clip.id}-${handle}`}
-              type="button"
-              className={`${styles.previewOverlayResizeHandle} ${styles[`previewOverlayResizeHandle${handle.toUpperCase()}`]}`}
-              aria-label={`Resize ${clip.name} from ${handle}`}
-              onPointerDown={(event) => startResizeInteraction(event, clip, handle)}
-            />
-          ))}
+          {isSelected
+            ? RESIZE_HANDLES.map((handle) => (
+                <button
+                  key={`${clip.id}-${handle}`}
+                  type="button"
+                  className={`${styles.previewOverlayResizeHandle} ${styles[`previewOverlayResizeHandle${handle.toUpperCase()}`]}`}
+                  aria-label={`Resize ${clip.name} from ${handle}`}
+                  onPointerDown={(event) => startResizeInteraction(event, clip, handle)}
+                />
+              ))
+            : null}
         </div>
       );
     },
-    [interactionState, renderElementContent, selectedClipIds, startMoveInteraction, startResizeInteraction],
+    [getRenderedLayout, interactionState, renderElementContent, selectedClipIds, startMoveInteraction, startResizeInteraction],
   );
 
   return (
@@ -505,36 +583,25 @@ export const TimelinePreview = ({
     >
       <div
         ref={viewportRef}
-        className={`${styles.previewViewport} ${!hasFullFrameBackground ? styles.previewViewportCheckerboard : ""} ${isExternalDragOver ? styles.previewViewportDropTarget : ""}`}
+        className={`${styles.previewViewport} ${styles.previewViewportCheckerboard} ${isExternalDragOver ? styles.previewViewportDropTarget : ""}`}
         onPointerDown={handleViewportPointerDown}
         onDragOver={handlePreviewDragOver}
         onDragLeave={handlePreviewDragLeave}
         onDrop={handlePreviewDrop}
       >
         {activeVideo?.clip.mediaUrl ? (
-          <>
+          <div className={styles.previewVideoFrame}>
             <video
-              key={`${activeVideo.clip.id}-backdrop`}
-              ref={backdropVideoRef}
+              key={`${activeVideo.clip.id}-main`}
+              ref={mainVideoRef}
               src={activeVideo.clip.mediaUrl}
-              className={styles.previewBackdropVideo}
-              muted
+              className={styles.previewVideo}
               playsInline
               preload="metadata"
-              aria-hidden="true"
+              onLoadedMetadata={handleMainVideoMetadata}
             />
-            <div className={styles.previewVideoFrame}>
-              <video
-                key={`${activeVideo.clip.id}-main`}
-                ref={mainVideoRef}
-                src={activeVideo.clip.mediaUrl}
-                className={styles.previewVideo}
-                playsInline
-                preload="metadata"
-              />
-              <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
-            </div>
-          </>
+            <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
+          </div>
         ) : (
           <div className={styles.previewVideoFrame}>
             <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
@@ -544,6 +611,5 @@ export const TimelinePreview = ({
     </section>
   );
 };
-
 
 

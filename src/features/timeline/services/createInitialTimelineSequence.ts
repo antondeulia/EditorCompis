@@ -42,5 +42,11 @@ export const createInitialTimelineSequence = (): TimelineSequence => ({
       type: "audio",
       clips: [],
     },
+    {
+      id: "track-s1",
+      name: "S1",
+      type: "subtitle",
+      clips: [],
+    },
   ],
 });

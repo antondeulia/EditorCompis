@@ -3,6 +3,8 @@
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
+import { applyEditingSchemaToTimeline } from "@/features/ai-editing/services/applyEditingSchemaToTimeline";
+import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
 import { TimelinePanel, createInitialTimelineSequence } from "@/features/timeline";
 import {
   SidebarTimelineItem,
@@ -30,6 +32,25 @@ interface AssetItem {
   file: File;
   previewUrl: string | null;
   durationSeconds: number | null;
+}
+
+interface AiEditMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
+
+interface AiEditAssetContext {
+  id: string;
+  name: string;
+  mediaType: "video" | "audio" | "unknown";
+  durationFrames: number | null;
+}
+
+interface AiEditRouteResponse {
+  editingSchema?: EditingSchema;
+  error?: string;
+  details?: string;
 }
 
 interface SidebarLibraryItem {
@@ -233,6 +254,19 @@ const formatDurationFromFrames = (durationFrames: number, fps = 30) => {
   return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
 };
 
+const buildAiAssetContext = (assets: AssetItem[]): AiEditAssetContext[] =>
+  assets.map((asset) => {
+    const inferredType = inferMediaTypeFromAsset(asset.file);
+    return {
+      id: asset.id,
+      name: asset.file.name,
+      mediaType: inferredType,
+      durationFrames: asset.durationSeconds
+        ? Math.max(Math.round(asset.durationSeconds * 30), 1)
+        : null,
+    };
+  });
+
 const isTimelineSequence = (value: unknown): value is TimelineSequence => {
   if (!value || typeof value !== "object") {
     return false;
@@ -264,7 +298,7 @@ const isTimelineSequence = (value: unknown): value is TimelineSequence => {
     if (
       typeof typedTrack.id !== "string" ||
       typeof typedTrack.name !== "string" ||
-      (typedTrack.type !== "video" && typedTrack.type !== "audio") ||
+      (typedTrack.type !== "video" && typedTrack.type !== "audio" && typedTrack.type !== "subtitle") ||
       !Array.isArray(typedTrack.clips)
     ) {
       return false;
@@ -334,6 +368,49 @@ const readMediaDurationSeconds = async (file: File, existingObjectUrl?: string):
   }
 };
 
+const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
+  if (item.source === "asset" && item.mediaType === "video") {
+    return {
+      previewX: 0,
+      previewY: 0,
+      previewWidth: 1,
+      previewHeight: 1,
+    };
+  }
+
+  const loweredLabel = item.label.toLowerCase();
+  const isTextPreset = /(title|subtitle|header|text|quote|description|body|h1|h2|h3)/i.test(loweredLabel);
+
+  if (isTextPreset) {
+    if (loweredLabel.includes("subtitle")) {
+      return { previewX: 0.26, previewY: 0.78, previewWidth: 0.48, previewHeight: 0.11 };
+    }
+
+    if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
+      return { previewX: 0.28, previewY: 0.1, previewWidth: 0.44, previewHeight: 0.14 };
+    }
+
+    if (loweredLabel.includes("h2") || loweredLabel.includes("h3") || loweredLabel.includes("header")) {
+      return { previewX: 0.3, previewY: 0.18, previewWidth: 0.4, previewHeight: 0.12 };
+    }
+
+    return { previewX: 0.28, previewY: 0.3, previewWidth: 0.44, previewHeight: 0.16 };
+  }
+
+  if (loweredLabel.includes("circle")) {
+    return { previewX: 0.39, previewY: 0.32, previewWidth: 0.22, previewHeight: 0.22 };
+  }
+
+  if (loweredLabel.includes("triangle")) {
+    return { previewX: 0.35, previewY: 0.36, previewWidth: 0.3, previewHeight: 0.22 };
+  }
+
+  if (loweredLabel.includes("line")) {
+    return { previewX: 0.25, previewY: 0.47, previewWidth: 0.5, previewHeight: 0.07 };
+  }
+
+  return { previewX: 0.33, previewY: 0.3, previewWidth: 0.34, previewHeight: 0.2 };
+};
 const createAssetItem = async (file: File): Promise<AssetItem> => {
   const canPreview = file.type.startsWith("image/") || file.type.startsWith("video/");
   const previewUrl = canPreview ? URL.createObjectURL(file) : null;
@@ -355,6 +432,10 @@ export default function Home() {
   const [timelinePanelKey, setTimelinePanelKey] = useState(0);
   const [jsonDraft, setJsonDraft] = useState("");
   const [jsonStatus, setJsonStatus] = useState<string | null>(null);
+  const [aiMessageDraft, setAiMessageDraft] = useState("");
+  const [aiMessages, setAiMessages] = useState<AiEditMessage[]>([]);
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [isAiRequestInFlight, setIsAiRequestInFlight] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const currentSequenceRef = useRef<TimelineSequence>(timelineSequence);
 
@@ -434,6 +515,62 @@ export default function Home() {
     clearCurrentTimelineDragItem();
   };
 
+  const handleTimelineItemClick = (item: SidebarTimelineItem) => {
+    const currentSequence = currentSequenceRef.current;
+    const targetTrackIndex = currentSequence.tracks.findIndex((track) => track.type === item.mediaType);
+
+    if (targetTrackIndex < 0) {
+      return;
+    }
+
+    const durationFrames = Math.max(Math.round(item.durationFrames), 6);
+    const boundedDurationFrames = Math.min(durationFrames, currentSequence.durationFrames);
+
+    const targetTrack = currentSequence.tracks[targetTrackIndex];
+    const nextStartFrame = targetTrack.clips.reduce(
+      (maxFrame, clip) => Math.max(maxFrame, clip.startFrame + clip.durationFrames),
+      0,
+    );
+
+    const startFrame = Math.min(
+      Math.max(nextStartFrame, 0),
+      Math.max(currentSequence.durationFrames - boundedDurationFrames, 0),
+    );
+
+    const previewDefaults = getPreviewDefaultsForItem(item);
+
+    const nextClip = {
+      id: `clip-click-${crypto.randomUUID()}`,
+      name: item.label,
+      startFrame,
+      durationFrames: boundedDurationFrames,
+      source: item.source,
+      mediaUrl: item.mediaUrl,
+      previewX: previewDefaults.previewX,
+      previewY: previewDefaults.previewY,
+      previewWidth: previewDefaults.previewWidth,
+      previewHeight: previewDefaults.previewHeight,
+    };
+
+    const nextSequence: TimelineSequence = {
+      ...currentSequence,
+      tracks: currentSequence.tracks.map((track, index) => {
+        if (index !== targetTrackIndex) {
+          return track;
+        }
+
+        return {
+          ...track,
+          clips: [...track.clips, nextClip].sort((a, b) => a.startFrame - b.startFrame),
+        };
+      }),
+    };
+
+    currentSequenceRef.current = nextSequence;
+    setTimelineSequence(nextSequence);
+    setTimelinePanelKey((value) => value + 1);
+  };
+
   const handleLoadCurrentJson = () => {
     setJsonDraft(JSON.stringify(currentSequenceRef.current, null, 2));
     setJsonStatus("Loaded current timeline JSON.");
@@ -463,6 +600,91 @@ export default function Home() {
       setJsonStatus("Timeline updated from JSON.");
     } catch {
       setJsonStatus("JSON parse error. Check syntax and try again.");
+    }
+  };
+
+  const handleAiEditSubmit = async () => {
+    const trimmedMessage = aiMessageDraft.trim();
+    if (!trimmedMessage) {
+      return;
+    }
+
+    const userMessage: AiEditMessage = {
+      id: `user-${crypto.randomUUID()}`,
+      role: "user",
+      text: trimmedMessage,
+    };
+
+    setAiMessages((currentMessages) => [...currentMessages, userMessage]);
+    setAiMessageDraft("");
+    setAiStatus("Generating editing schema...");
+    setIsAiRequestInFlight(true);
+
+    try {
+      const response = await fetch("/api/ai-edit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userMessage: trimmedMessage,
+          assets: buildAiAssetContext(assets),
+          currentSequence: currentSequenceRef.current,
+        }),
+      });
+
+      const payload = (await response.json()) as AiEditRouteResponse;
+
+      if (!response.ok || !payload.editingSchema) {
+        const errorText = payload.error ?? "AI Edit request failed.";
+        const extraDetails = payload.details ? ` ${payload.details}` : "";
+        setAiMessages((currentMessages) => [
+          ...currentMessages,
+          {
+            id: `assistant-${crypto.randomUUID()}`,
+            role: "assistant",
+            text: `${errorText}${extraDetails}`.trim(),
+          },
+        ]);
+        setAiStatus("Failed to apply AI editing schema.");
+        return;
+      }
+
+      const editingSchema = payload.editingSchema;
+      if (!editingSchema) {
+        setAiStatus("AI response did not include editing schema.");
+        return;
+      }
+
+      const nextSequence = applyEditingSchemaToTimeline(
+        currentSequenceRef.current,
+        editingSchema,
+      );
+
+      setTimelineSequence(nextSequence);
+      currentSequenceRef.current = nextSequence;
+      setTimelinePanelKey((current) => current + 1);
+      setAiMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: `assistant-${crypto.randomUUID()}`,
+          role: "assistant",
+          text: editingSchema.assistantMessage,
+        },
+      ]);
+      setAiStatus("Editing schema applied to timeline.");
+    } catch {
+      setAiMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: `assistant-${crypto.randomUUID()}`,
+          role: "assistant",
+          text: "Network error while requesting OpenAI API.",
+        },
+      ]);
+      setAiStatus("Network error.");
+    } finally {
+      setIsAiRequestInFlight(false);
     }
   };
 
@@ -519,15 +741,30 @@ export default function Home() {
         <>
           <h2 className={styles.toolPanelTitle}>AI Edit</h2>
           <div className={styles.chatThread}>
-            <p className={styles.chatMessage}>Make jump cuts on pauses and clean up breathing.</p>
-            <p className={styles.chatMessageAssistant}>
-              Done. Found 5 pauses longer than 500ms and suggested cuts.
-            </p>
+            {aiMessages.map((message) => (
+              <p
+                key={message.id}
+                className={message.role === "user" ? styles.chatMessage : styles.chatMessageAssistant}
+              >
+                {message.text}
+              </p>
+            ))}
           </div>
-          <textarea className={styles.chatInput} placeholder="Describe the edit you need..." />
-          <button type="button" className={styles.primaryAction}>
+          <textarea
+            className={styles.chatInput}
+            value={aiMessageDraft}
+            onChange={(event) => setAiMessageDraft(event.target.value)}
+            placeholder="Describe the edit you need..."
+          />
+          <button
+            type="button"
+            className={styles.primaryAction}
+            onClick={() => void handleAiEditSubmit()}
+            disabled={isAiRequestInFlight}
+          >
             Send
           </button>
+          {aiStatus ? <p className={styles.jsonStatus}>{aiStatus}</p> : null}
         </>
       );
     }
@@ -570,6 +807,7 @@ export default function Home() {
                   onDragStart={(event) => handleTimelineItemDragStart(event, createAssetDragItem(asset))}
                   onDragEnd={handleTimelineItemDragEnd}
                   title="Drag to timeline"
+                  onClick={() => handleTimelineItemClick(createAssetDragItem(asset))}
                 >
                   {asset.previewUrl ? (
                     asset.file.type.startsWith("image/") ? (
@@ -611,7 +849,7 @@ export default function Home() {
       return (
         <>
           <h2 className={styles.toolPanelTitle}>Elements</h2>
-          <p className={styles.libraryIntro}>Drag any element straight to the video track.</p>
+          <p className={styles.libraryIntro}>Drag any element to the matching timeline track.</p>
           <div className={styles.assetList}>
             {elementSections.map((section) => (
               <section key={section.id} className={styles.librarySection}>
@@ -625,6 +863,7 @@ export default function Home() {
                       onDragStart={(event) => handleTimelineItemDragStart(event, item.dragItem)}
                       onDragEnd={handleTimelineItemDragEnd}
                       title="Drag to timeline"
+                      onClick={() => handleTimelineItemClick(item.dragItem)}
                     >
                       <span className={styles.libraryCardIcon} aria-hidden="true">
                         {item.icon}
@@ -664,6 +903,7 @@ export default function Home() {
                       onDragStart={(event) => handleTimelineItemDragStart(event, item.dragItem)}
                       onDragEnd={handleTimelineItemDragEnd}
                       title="Drag to timeline"
+                      onClick={() => handleTimelineItemClick(item.dragItem)}
                     >
                       <span className={styles.libraryCardIcon} aria-hidden="true">
                         {item.icon}

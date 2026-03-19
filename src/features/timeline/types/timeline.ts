@@ -1,4 +1,4 @@
-export type TimelineTrackType = "video" | "audio";
+export type TimelineTrackType = "video" | "audio" | "subtitle";
 
 export interface TimelineClip {
   id: string;

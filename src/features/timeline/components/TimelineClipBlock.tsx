@@ -41,7 +41,7 @@ export const TimelineClipBlock = ({
   onResizeRightPointerDown,
 }: TimelineClipBlockProps) => {
   const clipColorClass =
-    trackType === "video" ? styles.clipBlockVideo : styles.clipBlockAudio;
+    trackType === "video" ? styles.clipBlockVideo : trackType === "audio" ? styles.clipBlockAudio : styles.clipBlockSubtitle;
   const interactingClass = isInteracting ? styles.clipBlockDragging : "";
   const selectedClass = isSelected ? styles.clipBlockSelected : "";
   const ghostClass = isGhost ? styles.clipBlockGhost : "";

@@ -73,8 +73,8 @@ export const TimelineTrackRow = ({
             ? activeDragState.previewStartFrame * framePixelRatio
             : clip.startFrame * framePixelRatio;
           const widthPx = isInteracting
-            ? Math.max(activeDragState.previewDurationFrames * framePixelRatio, 32)
-            : Math.max(clip.durationFrames * framePixelRatio, 32);
+            ? Math.max(activeDragState.previewDurationFrames * framePixelRatio, 28)
+            : Math.max(clip.durationFrames * framePixelRatio, 28);
           const dragOffsetYPx =
             isInteracting && activeDragState.mode === "move"
               ? activeDragState.currentPointerY - activeDragState.startPointerY
@@ -112,7 +112,7 @@ export const TimelineTrackRow = ({
               source: externalPreview.source,
             }}
             leftOffsetPx={externalPreview.startFrame * framePixelRatio}
-            widthPx={Math.max(externalPreview.durationFrames * framePixelRatio, 32)}
+            widthPx={Math.max(externalPreview.durationFrames * framePixelRatio, 28)}
             trackType={externalPreview.mediaType}
             isInteracting
             isSelected={false}
@@ -123,3 +123,4 @@ export const TimelineTrackRow = ({
     </div>
   );
 };
+

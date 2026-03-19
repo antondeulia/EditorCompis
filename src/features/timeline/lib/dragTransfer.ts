@@ -39,7 +39,7 @@ export const parseTimelineDragItemFromDataTransfer = (
 
     if (
       typeof parsed.label !== "string" ||
-      (parsed.mediaType !== "video" && parsed.mediaType !== "audio") ||
+      (parsed.mediaType !== "video" && parsed.mediaType !== "audio" && parsed.mediaType !== "subtitle") ||
       typeof parsed.durationFrames !== "number" ||
       (parsed.source !== "asset" && parsed.source !== "element") ||
       (parsed.mediaUrl !== undefined && typeof parsed.mediaUrl !== "string")
