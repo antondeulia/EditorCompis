@@ -99,30 +99,76 @@ const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
   }
 
   const loweredLabel = item.label.toLowerCase();
+  const isTextPreset = /(title|subtitle|header|text|quote|description|body|h1|h2|h3)/i.test(loweredLabel);
 
-  if (loweredLabel.includes("subtitle")) {
+  if (isTextPreset) {
+    if (loweredLabel.includes("subtitle")) {
+      return {
+        previewX: 0.22,
+        previewY: 0.78,
+        previewWidth: 0.56,
+        previewHeight: 0.13,
+      };
+    }
+
+    if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
+      return {
+        previewX: 0.25,
+        previewY: 0.1,
+        previewWidth: 0.5,
+        previewHeight: 0.16,
+      };
+    }
+
+    if (loweredLabel.includes("h2") || loweredLabel.includes("h3") || loweredLabel.includes("header")) {
+      return {
+        previewX: 0.27,
+        previewY: 0.18,
+        previewWidth: 0.46,
+        previewHeight: 0.14,
+      };
+    }
+
     return {
-      previewX: 0.1,
-      previewY: 0.78,
-      previewWidth: 0.8,
-      previewHeight: 0.14,
+      previewX: 0.24,
+      previewY: 0.3,
+      previewWidth: 0.52,
+      previewHeight: 0.18,
     };
   }
 
-  if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
+  if (loweredLabel.includes("circle")) {
     return {
-      previewX: 0.1,
-      previewY: 0.08,
-      previewWidth: 0.8,
-      previewHeight: 0.2,
+      previewX: 0.37,
+      previewY: 0.3,
+      previewWidth: 0.26,
+      previewHeight: 0.26,
+    };
+  }
+
+  if (loweredLabel.includes("triangle")) {
+    return {
+      previewX: 0.33,
+      previewY: 0.34,
+      previewWidth: 0.34,
+      previewHeight: 0.26,
+    };
+  }
+
+  if (loweredLabel.includes("line")) {
+    return {
+      previewX: 0.22,
+      previewY: 0.46,
+      previewWidth: 0.56,
+      previewHeight: 0.08,
     };
   }
 
   return {
-    previewX: 0.2,
-    previewY: 0.2,
-    previewWidth: 0.6,
-    previewHeight: 0.22,
+    previewX: 0.3,
+    previewY: 0.28,
+    previewWidth: 0.4,
+    previewHeight: 0.24,
   };
 };
 const collectSnapFrames = (
@@ -815,6 +861,81 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     [framePixelRatio, sequence.durationFrames, tracks],
   );
 
+  const handlePreviewExternalDrop = useCallback(
+    (draggedItem: SidebarTimelineItem, dropPoint?: { x: number; y: number }) => {
+      const targetTrackIndex = tracks.findIndex((track) => track.type === draggedItem.mediaType);
+      if (targetTrackIndex < 0) {
+        clearCurrentTimelineDragItem();
+        return;
+      }
+
+      const clipDurationFrames = clamp(
+        Math.round(draggedItem.durationFrames),
+        MIN_CLIP_DURATION_FRAMES,
+        sequence.durationFrames,
+      );
+      const maxStartFrame = Math.max(sequence.durationFrames - clipDurationFrames, 0);
+      const rawStartFrame = clamp(Math.round(currentFrame), 0, maxStartFrame);
+      const snapFrames = collectSnapFrames(tracks, sequence.durationFrames, new Set());
+      const thresholdFrames = SNAP_THRESHOLD_PX / framePixelRatio;
+      const snap = getBestSnap(
+        [rawStartFrame, rawStartFrame + clipDurationFrames],
+        snapFrames,
+        thresholdFrames,
+      );
+      const startFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
+      const previewDefaults = getPreviewDefaultsForItem(draggedItem);
+      const previewPosition =
+        dropPoint && draggedItem.source === "element"
+          ? {
+              previewX: clamp(
+                dropPoint.x - previewDefaults.previewWidth / 2,
+                0,
+                Math.max(1 - previewDefaults.previewWidth, 0),
+              ),
+              previewY: clamp(
+                dropPoint.y - previewDefaults.previewHeight / 2,
+                0,
+                Math.max(1 - previewDefaults.previewHeight, 0),
+              ),
+              previewWidth: previewDefaults.previewWidth,
+              previewHeight: previewDefaults.previewHeight,
+            }
+          : previewDefaults;
+
+      const droppedClip: TimelineClip = {
+        id: `clip-drop-${crypto.randomUUID()}`,
+        name: draggedItem.label,
+        startFrame,
+        durationFrames: clipDurationFrames,
+        source: draggedItem.source,
+        mediaUrl: draggedItem.mediaUrl,
+        previewX: previewPosition.previewX,
+        previewY: previewPosition.previewY,
+        previewWidth: previewPosition.previewWidth,
+        previewHeight: previewPosition.previewHeight,
+      };
+
+      setTracks((currentTracks) =>
+        currentTracks.map((track, index) => {
+          if (index !== targetTrackIndex) {
+            return track;
+          }
+
+          return {
+            ...track,
+            clips: [...track.clips, droppedClip].sort((a, b) => a.startFrame - b.startFrame),
+          };
+        }),
+      );
+
+      setSelectedClipIds([droppedClip.id]);
+      setLastSelectedClipId(droppedClip.id);
+      clearCurrentTimelineDragItem();
+    },
+    [currentFrame, framePixelRatio, sequence.durationFrames, tracks],
+  );
+
   const handlePreviewClipSelect = useCallback((clipId: string | null) => {
     if (!clipId) {
       setSelectedClipIds([]);
@@ -851,63 +972,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     [],
   );
 
-  const handlePreviewExternalDrop = useCallback(
-    (draggedItem: SidebarTimelineItem) => {
-      const targetTrackIndex = tracks.findIndex((track) => track.type === draggedItem.mediaType);
-      if (targetTrackIndex < 0) {
-        clearCurrentTimelineDragItem();
-        return;
-      }
-
-      const clipDurationFrames = clamp(
-        Math.round(draggedItem.durationFrames),
-        MIN_CLIP_DURATION_FRAMES,
-        sequence.durationFrames,
-      );
-      const maxStartFrame = Math.max(sequence.durationFrames - clipDurationFrames, 0);
-      const rawStartFrame = clamp(Math.round(currentFrame), 0, maxStartFrame);
-      const snapFrames = collectSnapFrames(tracks, sequence.durationFrames, new Set());
-      const thresholdFrames = SNAP_THRESHOLD_PX / framePixelRatio;
-      const snap = getBestSnap(
-        [rawStartFrame, rawStartFrame + clipDurationFrames],
-        snapFrames,
-        thresholdFrames,
-      );
-      const startFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
-      const previewDefaults = getPreviewDefaultsForItem(draggedItem);
-
-      const droppedClip: TimelineClip = {
-        id: `clip-drop-${crypto.randomUUID()}`,
-        name: draggedItem.label,
-        startFrame,
-        durationFrames: clipDurationFrames,
-        source: draggedItem.source,
-        mediaUrl: draggedItem.mediaUrl,
-        previewX: previewDefaults.previewX,
-        previewY: previewDefaults.previewY,
-        previewWidth: previewDefaults.previewWidth,
-        previewHeight: previewDefaults.previewHeight,
-      };
-
-      setTracks((currentTracks) =>
-        currentTracks.map((track, index) => {
-          if (index !== targetTrackIndex) {
-            return track;
-          }
-
-          return {
-            ...track,
-            clips: [...track.clips, droppedClip].sort((a, b) => a.startFrame - b.startFrame),
-          };
-        }),
-      );
-
-      setSelectedClipIds([droppedClip.id]);
-      setLastSelectedClipId(droppedClip.id);
-      clearCurrentTimelineDragItem();
-    },
-    [currentFrame, framePixelRatio, sequence.durationFrames, tracks],
-  );
   const handleWindowPointerMove = useCallback(
     (event: PointerEvent) => {
       if (isScrubbing) {
@@ -1147,6 +1211,9 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     </section>
   );
 };
+
+
+
 
 
 

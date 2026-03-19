@@ -28,7 +28,7 @@ interface TimelinePreviewProps {
     clipId: string,
     nextTransform: Pick<TimelineClip, "previewX" | "previewY" | "previewWidth" | "previewHeight">,
   ) => void;
-  onDropExternalItem: (item: SidebarTimelineItem) => void;
+  onDropExternalItem: (item: SidebarTimelineItem, dropPoint?: { x: number; y: number }) => void;
 }
 
 interface ActivePreviewClip {
@@ -37,10 +37,12 @@ interface ActivePreviewClip {
 }
 
 type PreviewInteractionMode = "move" | "resize";
+type ResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
 interface PreviewInteractionState {
   clipId: string;
   mode: PreviewInteractionMode;
+  resizeHandle?: ResizeHandle;
   startClientX: number;
   startClientY: number;
   initialX: number;
@@ -48,6 +50,10 @@ interface PreviewInteractionState {
   initialWidth: number;
   initialHeight: number;
 }
+
+const RESIZE_HANDLES: ResizeHandle[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
+
+const TEXT_LABEL_PATTERN = /(title|subtitle|header|text|quote|description|body|h1|h2|h3)/i;
 
 const clamp = (value: number, min: number, max: number) => {
   if (value < min) {
@@ -59,6 +65,25 @@ const clamp = (value: number, min: number, max: number) => {
   }
 
   return value;
+};
+
+const getResizeCursor = (handle?: ResizeHandle) => {
+  switch (handle) {
+    case "n":
+    case "s":
+      return "ns-resize";
+    case "e":
+    case "w":
+      return "ew-resize";
+    case "ne":
+    case "sw":
+      return "nesw-resize";
+    case "nw":
+    case "se":
+      return "nwse-resize";
+    default:
+      return "nwse-resize";
+  }
 };
 
 const getPreviewLayout = (clip: TimelineClip) => {
@@ -111,6 +136,30 @@ const collectActivePreviewClips = (tracks: TimelineTrack[], frame: number): Acti
 
   return activeClips;
 };
+
+const getElementVariant = (name: string): "text" | "circle" | "triangle" | "line" | "shape" => {
+  const loweredName = name.toLowerCase();
+
+  if (TEXT_LABEL_PATTERN.test(loweredName)) {
+    return "text";
+  }
+
+  if (loweredName.includes("circle")) {
+    return "circle";
+  }
+
+  if (loweredName.includes("triangle")) {
+    return "triangle";
+  }
+
+  if (loweredName.includes("line")) {
+    return "line";
+  }
+
+  return "shape";
+};
+
+const getTextLabel = (name: string) => name.replace(/\s*\(h\d\)/i, "").trim();
 
 export const TimelinePreview = ({
   tracks,
@@ -237,22 +286,43 @@ export const TimelinePreview = ({
         return;
       }
 
-      const nextWidth = clamp(
-        interactionState.initialWidth + deltaX,
-        0.08,
-        Math.max(1 - interactionState.initialX, 0.08),
-      );
-      const nextHeight = clamp(
-        interactionState.initialHeight + deltaY,
-        0.08,
-        Math.max(1 - interactionState.initialY, 0.08),
-      );
+      const minSize = 0.08;
+      const handle = interactionState.resizeHandle ?? "se";
+
+      let left = interactionState.initialX;
+      let top = interactionState.initialY;
+      let right = interactionState.initialX + interactionState.initialWidth;
+      let bottom = interactionState.initialY + interactionState.initialHeight;
+
+      if (handle.includes("w")) {
+        left = clamp(interactionState.initialX + deltaX, 0, right - minSize);
+      }
+
+      if (handle.includes("e")) {
+        right = clamp(
+          interactionState.initialX + interactionState.initialWidth + deltaX,
+          left + minSize,
+          1,
+        );
+      }
+
+      if (handle.includes("n")) {
+        top = clamp(interactionState.initialY + deltaY, 0, bottom - minSize);
+      }
+
+      if (handle.includes("s")) {
+        bottom = clamp(
+          interactionState.initialY + interactionState.initialHeight + deltaY,
+          top + minSize,
+          1,
+        );
+      }
 
       onClipTransformChange(interactionState.clipId, {
-        previewX: interactionState.initialX,
-        previewY: interactionState.initialY,
-        previewWidth: nextWidth,
-        previewHeight: nextHeight,
+        previewX: left,
+        previewY: top,
+        previewWidth: clamp(right - left, minSize, 1),
+        previewHeight: clamp(bottom - top, minSize, 1),
       });
     };
 
@@ -264,7 +334,8 @@ export const TimelinePreview = ({
     window.addEventListener("pointerup", handlePointerUp);
 
     document.body.style.userSelect = "none";
-    document.body.style.cursor = interactionState.mode === "move" ? "grabbing" : "nwse-resize";
+    document.body.style.cursor =
+      interactionState.mode === "move" ? "grabbing" : getResizeCursor(interactionState.resizeHandle);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
@@ -296,7 +367,13 @@ export const TimelinePreview = ({
         return;
       }
 
-      onDropExternalItem(draggedItem);
+      const viewportRect = event.currentTarget.getBoundingClientRect();
+      const dropPoint = {
+        x: clamp((event.clientX - viewportRect.left) / viewportRect.width, 0, 1),
+        y: clamp((event.clientY - viewportRect.top) / viewportRect.height, 0, 1),
+      };
+
+      onDropExternalItem(draggedItem, dropPoint);
     },
     [onDropExternalItem],
   );
@@ -328,7 +405,7 @@ export const TimelinePreview = ({
   );
 
   const startResizeInteraction = useCallback(
-    (event: ReactPointerEvent<HTMLElement>, clip: TimelineClip) => {
+    (event: ReactPointerEvent<HTMLElement>, clip: TimelineClip, handle: ResizeHandle) => {
       event.stopPropagation();
       event.preventDefault();
 
@@ -338,6 +415,7 @@ export const TimelinePreview = ({
       setInteractionState({
         clipId: clip.id,
         mode: "resize",
+        resizeHandle: handle,
         startClientX: event.clientX,
         startClientY: event.clientY,
         initialX: layout.previewX,
@@ -356,6 +434,68 @@ export const TimelinePreview = ({
       }
     },
     [onSelectClip],
+  );
+
+  const renderElementContent = useCallback((clip: TimelineClip) => {
+    if (clip.source !== "element") {
+      return null;
+    }
+
+    const variant = getElementVariant(clip.name);
+
+    if (variant === "text") {
+      return <span className={styles.previewElementText}>{getTextLabel(clip.name)}</span>;
+    }
+
+    if (variant === "circle") {
+      return <div className={styles.previewElementCircle} aria-hidden="true" />;
+    }
+
+    if (variant === "triangle") {
+      return <div className={styles.previewElementTriangle} aria-hidden="true" />;
+    }
+
+    if (variant === "line") {
+      return <div className={styles.previewElementLine} aria-hidden="true" />;
+    }
+
+    return <div className={styles.previewElementShape} aria-hidden="true" />;
+  }, []);
+
+  const renderOverlayItem = useCallback(
+    ({ clip, trackIndex }: ActivePreviewClip) => {
+      const layout = getPreviewLayout(clip);
+      const isSelected = selectedClipIds.includes(clip.id);
+      const isInteractive = interactionState?.clipId === clip.id;
+
+      return (
+        <div
+          key={clip.id}
+          className={`${styles.previewOverlayItem} ${isSelected ? styles.previewOverlayItemSelected : ""} ${isInteractive ? styles.previewOverlayItemInteractive : ""} ${styles.previewOverlayItemDropIn}`}
+          style={{
+            left: `${layout.previewX * 100}%`,
+            top: `${layout.previewY * 100}%`,
+            width: `${layout.previewWidth * 100}%`,
+            height: `${layout.previewHeight * 100}%`,
+            zIndex: isSelected ? 120 : 30 + trackIndex,
+          }}
+          onPointerDown={(event) => startMoveInteraction(event, clip)}
+        >
+          <div className={styles.previewElementContent}>{renderElementContent(clip)}</div>
+
+          {RESIZE_HANDLES.map((handle) => (
+            <button
+              key={`${clip.id}-${handle}`}
+              type="button"
+              className={`${styles.previewOverlayResizeHandle} ${styles[`previewOverlayResizeHandle${handle.toUpperCase()}`]}`}
+              aria-label={`Resize ${clip.name} from ${handle}`}
+              onPointerDown={(event) => startResizeInteraction(event, clip, handle)}
+            />
+          ))}
+        </div>
+      );
+    },
+    [interactionState, renderElementContent, selectedClipIds, startMoveInteraction, startResizeInteraction],
   );
 
   return (
@@ -392,71 +532,18 @@ export const TimelinePreview = ({
                 playsInline
                 preload="metadata"
               />
-              <div className={styles.previewOverlayLayer}>
-                {activePreviewClips.map(({ clip, trackIndex }) => {
-                  const layout = getPreviewLayout(clip);
-                  const isSelected = selectedClipIds.includes(clip.id);
-
-                  return (
-                    <div
-                      key={clip.id}
-                      className={`${styles.previewOverlayItem} ${isSelected ? styles.previewOverlayItemSelected : ""}`}
-                      style={{
-                        left: `${layout.previewX * 100}%`,
-                        top: `${layout.previewY * 100}%`,
-                        width: `${layout.previewWidth * 100}%`,
-                        height: `${layout.previewHeight * 100}%`,
-                        zIndex: isSelected ? 120 : 30 + trackIndex,
-                      }}
-                      onPointerDown={(event) => startMoveInteraction(event, clip)}
-                    >
-                      <span className={styles.previewOverlayLabel}>{clip.name}</span>
-                      <button
-                        type="button"
-                        className={styles.previewOverlayResizeHandle}
-                        aria-label={`Resize ${clip.name}`}
-                        onPointerDown={(event) => startResizeInteraction(event, clip)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
             </div>
           </>
         ) : (
           <div className={styles.previewVideoFrame}>
-            <div className={styles.previewOverlayLayer}>
-              {activePreviewClips.map(({ clip, trackIndex }) => {
-                const layout = getPreviewLayout(clip);
-                const isSelected = selectedClipIds.includes(clip.id);
-
-                return (
-                  <div
-                    key={clip.id}
-                    className={`${styles.previewOverlayItem} ${isSelected ? styles.previewOverlayItemSelected : ""}`}
-                    style={{
-                      left: `${layout.previewX * 100}%`,
-                      top: `${layout.previewY * 100}%`,
-                      width: `${layout.previewWidth * 100}%`,
-                      height: `${layout.previewHeight * 100}%`,
-                      zIndex: isSelected ? 120 : 30 + trackIndex,
-                    }}
-                    onPointerDown={(event) => startMoveInteraction(event, clip)}
-                  >
-                    <span className={styles.previewOverlayLabel}>{clip.name}</span>
-                    <button
-                      type="button"
-                      className={styles.previewOverlayResizeHandle}
-                      aria-label={`Resize ${clip.name}`}
-                      onPointerDown={(event) => startResizeInteraction(event, clip)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
           </div>
         )}
       </div>
     </section>
   );
 };
+
+
+
