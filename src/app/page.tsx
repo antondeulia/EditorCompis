@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 import { applyEditingSchemaToTimeline } from "@/features/ai-editing/services/applyEditingSchemaToTimeline";
@@ -15,17 +15,68 @@ import { TimelineSequence } from "@/features/timeline/types/timeline";
 
 import styles from "./page.module.css";
 
-const sidebarItems = [
-  { id: "assets", icon: "A", label: "Assets" },
-  { id: "ai-edit", icon: "E", label: "AI Edit" },
-  { id: "ai-tools", icon: "T", label: "AI Tools" },
-  { id: "elements", icon: "El", label: "Elements" },
-  { id: "text", icon: "Tx", label: "Text" },
-  { id: "json", icon: "{}", label: "JSON" },
+type SidebarItemId = "assets" | "ai-edit" | "ai-tools" | "elements" | "text" | "json";
+
+const sidebarItems: Array<{ id: SidebarItemId; label: string }> = [
+  { id: "assets", label: "Assets" },
+  { id: "ai-edit", label: "AI Edit" },
+  { id: "ai-tools", label: "AI Tools" },
+  { id: "elements", label: "Elements" },
+  { id: "text", label: "Text" },
+  { id: "json", label: "JSON" },
 ];
+
+const SidebarNavIcon = ({ itemId }: { itemId: SidebarItemId }): ReactNode => {
+  switch (itemId) {
+    case "assets":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        </svg>
+      );
+    case "ai-edit":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3l1.9 4.7L19 9.6l-4.1 2.2L13 17l-1.9-5.2L7 9.6l5.1-1.9z" />
+        </svg>
+      );
+    case "ai-tools":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 6h12M6 12h12M6 18h12" />
+          <circle cx="9" cy="6" r="2" />
+          <circle cx="15" cy="12" r="2" />
+          <circle cx="11" cy="18" r="2" />
+        </svg>
+      );
+    case "elements":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+          <circle cx="17" cy="7.5" r="3.5" />
+          <path d="M4 20h16l-4-6H8z" />
+        </svg>
+      );
+    case "text":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6h16M12 6v12M7 18h10" />
+        </svg>
+      );
+    case "json":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M10 5c-2.3 0-3 1.5-3 3v2c0 1.4-.6 2-2 2 1.4 0 2 .6 2 2v2c0 1.5.7 3 3 3M14 5c2.3 0 3 1.5 3 3v2c0 1.4.6 2 2 2-1.4 0-2 .6-2 2v2c0 1.5-.7 3-3 3" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
 
 const TIMELINE_DRAG_MIME = "application/x-timeline-item";
 const DEFAULT_CLIP_DURATION_FRAMES = 30 * 8;
+const SUBTITLE_REQUEST_PATTERN = /(subtitle|subtitles|caption|captions|\u0441\u0443\u0431\u0442\u0438\u0442\u0440|\u0442\u0438\u0442\u0440)/i;
 
 interface AssetItem {
   id: string;
@@ -53,6 +104,70 @@ interface AiEditRouteResponse {
   details?: string;
 }
 
+interface AiEditStreamDoneEvent {
+  type: "done";
+  editingSchema: EditingSchema;
+  usage?: unknown;
+  model?: string;
+}
+
+interface AiEditStreamErrorEvent {
+  type: "error";
+  error: string;
+  details?: string;
+}
+
+interface AiEditStreamDeltaEvent {
+  type: "assistant_delta";
+  delta: string;
+}
+
+type AiEditStreamEvent = AiEditStreamDoneEvent | AiEditStreamErrorEvent | AiEditStreamDeltaEvent;
+
+interface TranscriptSegment {
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+}
+
+interface TranscriptWord {
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+}
+
+interface TranscriptionRouteResponse {
+  segments?: TranscriptSegment[];
+  words?: TranscriptWord[];
+  error?: string;
+  details?: string;
+}
+
+type SubtitleTimingMode = "phrase" | "word";
+
+interface SubtitleVisualStylePreferences {
+  textColor: string | null;
+  outlineColor: string | null;
+  outlineWidth: number | null;
+  backgroundColor: string | null;
+  backgroundOpacity: number | null;
+  fontWeight: number | null;
+  fontSizePx: number | null;
+  borderRadiusPx: number | null;
+  paddingXPx: number | null;
+  paddingYPx: number | null;
+}
+
+interface SubtitleGenerationPreferences {
+  timingMode: SubtitleTimingMode;
+  previewX: number;
+  previewY: number;
+  previewWidth: number;
+  previewHeight: number;
+  maxCharsPerChunk: number;
+  style: SubtitleVisualStylePreferences;
+}
+
 interface SidebarLibraryItem {
   id: string;
   icon: string;
@@ -76,28 +191,28 @@ const elementSections: SidebarLibrarySection[] = [
         id: "shape-rect",
         icon: "[]",
         title: "Solid Rectangle",
-        description: "Чистый блок для плашек, масок и акцентов.",
+        description: "Clean block for plates, masks, and visual accents.",
         dragItem: { label: "Solid Rectangle", mediaType: "video", durationFrames: 30 * 6, source: "element" },
       },
       {
         id: "shape-circle",
         icon: "()",
         title: "Circle Pulse",
-        description: "Круглый акцент для указания фокуса.",
+        description: "Round accent for focus highlights.",
         dragItem: { label: "Circle Pulse", mediaType: "video", durationFrames: 30 * 5, source: "element" },
       },
       {
         id: "shape-triangle",
         icon: "/\\",
         title: "Triangle Marker",
-        description: "Направляющая фигура для инфографики.",
+        description: "Directional marker for infographics and pointers.",
         dragItem: { label: "Triangle Marker", mediaType: "video", durationFrames: 30 * 5, source: "element" },
       },
       {
         id: "shape-line",
         icon: "--",
         title: "Line Accent",
-        description: "Линейный разделитель для титров и карточек.",
+        description: "Linear divider for titles and cards.",
         dragItem: { label: "Line Accent", mediaType: "video", durationFrames: 30 * 4, source: "element" },
       },
     ],
@@ -110,42 +225,42 @@ const elementSections: SidebarLibrarySection[] = [
         id: "element-lower-third",
         icon: "LT",
         title: "Lower Third Pro",
-        description: "Современная нижняя плашка с местом под имя/роль.",
+        description: "Modern lower-third with room for name and role.",
         dragItem: { label: "Lower Third Pro", mediaType: "video", durationFrames: 30 * 6, source: "element" },
       },
       {
         id: "element-callout",
         icon: "!",
         title: "Callout Bubble",
-        description: "Выноска для подсказок и UI-демо.",
+        description: "Callout bubble for hints and UI demos.",
         dragItem: { label: "Callout Bubble", mediaType: "video", durationFrames: 30 * 5, source: "element" },
       },
       {
         id: "element-progress",
         icon: "==",
         title: "Progress Bar",
-        description: "Таймер/прогресс для сторителлинга.",
+        description: "Timer/progress bar for storytelling.",
         dragItem: { label: "Progress Bar", mediaType: "video", durationFrames: 30 * 8, source: "element" },
       },
       {
         id: "element-split",
         icon: "||",
         title: "Split Screen",
-        description: "Двухколоночная композиция для сравнения.",
+        description: "Two-column composition for side-by-side comparison.",
         dragItem: { label: "Split Screen", mediaType: "video", durationFrames: 30 * 10, source: "element" },
       },
       {
         id: "element-arrow",
         icon: "->",
         title: "Arrow Swipe",
-        description: "Динамическая стрелка для направления внимания.",
+        description: "Dynamic arrow to direct viewer attention.",
         dragItem: { label: "Arrow Swipe", mediaType: "video", durationFrames: 30 * 4, source: "element" },
       },
       {
         id: "element-burst",
         icon: "**",
         title: "Star Burst",
-        description: "Взрывной бейдж для акций, скидок, CTA.",
+        description: "Burst badge for promos, discounts, and CTA.",
         dragItem: { label: "Star Burst", mediaType: "video", durationFrames: 30 * 4, source: "element" },
       },
     ],
@@ -161,21 +276,21 @@ const textSections: SidebarLibrarySection[] = [
         id: "text-h1",
         icon: "H1",
         title: "Hero Title (H1)",
-        description: "Главный крупный заголовок сцены.",
+        description: "Primary large heading for the scene.",
         dragItem: { label: "Hero Title (H1)", mediaType: "video", durationFrames: 30 * 6, source: "element" },
       },
       {
         id: "text-h2",
         icon: "H2",
         title: "Section Title (H2)",
-        description: "Заголовок блока или новой темы.",
+        description: "Section heading for a new topic.",
         dragItem: { label: "Section Title (H2)", mediaType: "video", durationFrames: 30 * 6, source: "element" },
       },
       {
         id: "text-h3",
         icon: "H3",
         title: "Topic Header (H3)",
-        description: "Подзаголовок для тезисов и пунктов.",
+        description: "Subheading for key points and bullets.",
         dragItem: { label: "Topic Header (H3)", mediaType: "video", durationFrames: 30 * 5, source: "element" },
       },
     ],
@@ -188,28 +303,28 @@ const textSections: SidebarLibrarySection[] = [
         id: "text-subtitle",
         icon: "CC",
         title: "Subtitle",
-        description: "Субтитры в нижней безопасной зоне.",
+        description: "Subtitle in a lower safe area.",
         dragItem: { label: "Subtitle", mediaType: "video", durationFrames: 30 * 4, source: "element" },
       },
       {
         id: "text-description",
         icon: "DS",
         title: "Description",
-        description: "Описание/пояснение под заголовком.",
+        description: "Description or clarification under the heading.",
         dragItem: { label: "Description", mediaType: "video", durationFrames: 30 * 7, source: "element" },
       },
       {
         id: "text-body",
         icon: "Tx",
         title: "Body Text",
-        description: "Основной текст для карточек и сцен.",
+        description: "Main body text for cards and scenes.",
         dragItem: { label: "Body Text", mediaType: "video", durationFrames: 30 * 8, source: "element" },
       },
       {
         id: "text-quote",
         icon: "\"\"",
         title: "Quote Block",
-        description: "Цитата с акцентной типографикой.",
+        description: "Quote block with emphasized typography.",
         dragItem: { label: "Quote Block", mediaType: "video", durationFrames: 30 * 8, source: "element" },
       },
     ],
@@ -254,6 +369,176 @@ const formatDurationFromFrames = (durationFrames: number, fps = 30) => {
   return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`;
 };
 
+const TOOL_PANEL_MIN_WIDTH = 320;
+const STREAMING_STEP_MS = 20;
+const STREAMING_CHUNK_SIZE = 3;
+
+const markdownSpecialLinePatterns = [/^#{1,3}\s+/, /^>\s+/, /^[-*—]\s+/, /^\d+\.\s+/, /^```/];
+
+const isMarkdownSpecialLine = (line: string) => markdownSpecialLinePatterns.some((pattern) => pattern.test(line));
+
+const renderInlineMarkdown = (text: string, keyPrefix: string): ReactNode[] => {
+  const chunks = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*\n]+\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g);
+  const nodes: ReactNode[] = [];
+
+  chunks.forEach((chunk, index) => {
+    if (!chunk) {
+      return;
+    }
+
+    if (chunk.startsWith("`") && chunk.endsWith("`")) {
+      nodes.push(
+        <code key={`${keyPrefix}-code-${index}`} className={styles.chatInlineCode}>
+          {chunk.slice(1, -1)}
+        </code>,
+      );
+      return;
+    }
+
+    if (chunk.startsWith("**") && chunk.endsWith("**")) {
+      nodes.push(<strong key={`${keyPrefix}-strong-${index}`}>{chunk.slice(2, -2)}</strong>);
+      return;
+    }
+
+    if (chunk.startsWith("*") && chunk.endsWith("*")) {
+      nodes.push(<em key={`${keyPrefix}-em-${index}`}>{chunk.slice(1, -1)}</em>);
+      return;
+    }
+
+    const linkMatch = chunk.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+    if (linkMatch) {
+      nodes.push(
+        <a
+          key={`${keyPrefix}-link-${index}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noreferrer"
+          className={styles.chatLink}
+        >
+          {linkMatch[1]}
+        </a>,
+      );
+      return;
+    }
+
+    nodes.push(<span key={`${keyPrefix}-text-${index}`}>{chunk}</span>);
+  });
+
+  return nodes;
+};
+
+const renderMarkdownMessage = (text: string) => {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const blocks: ReactNode[] = [];
+  let lineIndex = 0;
+
+  while (lineIndex < lines.length) {
+    const line = lines[lineIndex]?.trimEnd() ?? "";
+
+    if (!line.trim()) {
+      lineIndex += 1;
+      continue;
+    }
+
+    if (line.startsWith("```")) {
+      const codeLines: string[] = [];
+      lineIndex += 1;
+      while (lineIndex < lines.length && !lines[lineIndex].startsWith("```")) {
+        codeLines.push(lines[lineIndex]);
+        lineIndex += 1;
+      }
+      lineIndex += 1;
+      blocks.push(
+        <pre key={`pre-${lineIndex}`} className={styles.chatCodeBlock}>
+          <code>{codeLines.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const textValue = headingMatch[2];
+      const className =
+        level === 1 ? styles.chatHeading1 : level === 2 ? styles.chatHeading2 : styles.chatHeading3;
+      blocks.push(
+        <p key={`h-${lineIndex}`} className={className}>
+          {renderInlineMarkdown(textValue, `h-${lineIndex}`)}
+        </p>,
+      );
+      lineIndex += 1;
+      continue;
+    }
+
+    if (/^>\s+/.test(line)) {
+      const quoteLines: string[] = [];
+      while (lineIndex < lines.length && /^>\s+/.test(lines[lineIndex])) {
+        quoteLines.push(lines[lineIndex].replace(/^>\s+/, ""));
+        lineIndex += 1;
+      }
+      blocks.push(
+        <blockquote key={`q-${lineIndex}`} className={styles.chatBlockquote}>
+          {quoteLines.join(" ")}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    if (/^[-*—]\s+/.test(line)) {
+      const listLines: string[] = [];
+      while (lineIndex < lines.length && /^[-*—]\s+/.test(lines[lineIndex])) {
+        listLines.push(lines[lineIndex].replace(/^[-*—]\s+/, ""));
+        lineIndex += 1;
+      }
+      blocks.push(
+        <ul key={`ul-${lineIndex}`} className={styles.chatList}>
+          {listLines.map((item, itemIndex) => (
+            <li key={`ul-${lineIndex}-${itemIndex}`}>{renderInlineMarkdown(item, `ul-${lineIndex}-${itemIndex}`)}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(line)) {
+      const orderedListLines: string[] = [];
+      while (lineIndex < lines.length && /^\d+\.\s+/.test(lines[lineIndex])) {
+        orderedListLines.push(lines[lineIndex].replace(/^\d+\.\s+/, ""));
+        lineIndex += 1;
+      }
+      blocks.push(
+        <ol key={`ol-${lineIndex}`} className={styles.chatList}>
+          {orderedListLines.map((item, itemIndex) => (
+            <li key={`ol-${lineIndex}-${itemIndex}`}>{renderInlineMarkdown(item, `ol-${lineIndex}-${itemIndex}`)}</li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    const paragraphLines: string[] = [line];
+    lineIndex += 1;
+    while (
+      lineIndex < lines.length &&
+      lines[lineIndex].trim().length > 0 &&
+      !isMarkdownSpecialLine(lines[lineIndex])
+    ) {
+      paragraphLines.push(lines[lineIndex]);
+      lineIndex += 1;
+    }
+
+    const paragraphText = paragraphLines.join(" ");
+    blocks.push(
+      <p key={`p-${lineIndex}`} className={styles.chatParagraph}>
+        {renderInlineMarkdown(paragraphText, `p-${lineIndex}`)}
+      </p>,
+    );
+  }
+
+  return blocks;
+};
+
 const buildAiAssetContext = (assets: AssetItem[]): AiEditAssetContext[] =>
   assets.map((asset) => {
     const inferredType = inferMediaTypeFromAsset(asset.file);
@@ -266,6 +551,15 @@ const buildAiAssetContext = (assets: AssetItem[]): AiEditAssetContext[] =>
         : null,
     };
   });
+
+const getTranscriptionCandidate = (assets: AssetItem[]): AssetItem | null => {
+  const videoAsset = assets.find((asset) => inferMediaTypeFromAsset(asset.file) === "video");
+  if (videoAsset) {
+    return videoAsset;
+  }
+
+  return assets.find((asset) => inferMediaTypeFromAsset(asset.file) === "audio") ?? null;
+};
 
 const isTimelineSequence = (value: unknown): value is TimelineSequence => {
   if (!value || typeof value !== "object") {
@@ -368,7 +662,429 @@ const readMediaDurationSeconds = async (file: File, existingObjectUrl?: string):
   }
 };
 
-const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
+const TRANSCRIPTION_SAMPLE_RATE = 16000;
+
+const downmixToMono = (audioBuffer: AudioBuffer): Float32Array => {
+  const { length, numberOfChannels } = audioBuffer;
+  if (numberOfChannels <= 1) {
+    return audioBuffer.getChannelData(0).slice();
+  }
+
+  const mono = new Float32Array(length);
+  for (let channel = 0; channel < numberOfChannels; channel += 1) {
+    const channelData = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < length; index += 1) {
+      mono[index] += channelData[index] / numberOfChannels;
+    }
+  }
+  return mono;
+};
+
+const resampleLinear = (
+  input: Float32Array,
+  inputSampleRate: number,
+  targetSampleRate: number,
+): Float32Array => {
+  if (inputSampleRate === targetSampleRate) {
+    return input;
+  }
+
+  const ratio = inputSampleRate / targetSampleRate;
+  const outputLength = Math.max(1, Math.floor(input.length / ratio));
+  const output = new Float32Array(outputLength);
+
+  for (let i = 0; i < outputLength; i += 1) {
+    const sourceIndex = i * ratio;
+    const left = Math.floor(sourceIndex);
+    const right = Math.min(left + 1, input.length - 1);
+    const mix = sourceIndex - left;
+    output[i] = input[left] * (1 - mix) + input[right] * mix;
+  }
+
+  return output;
+};
+
+const encodeMono16BitWav = (samples: Float32Array, sampleRate: number): Blob => {
+  const bytesPerSample = 2;
+  const blockAlign = bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = samples.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeAscii = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  };
+
+  writeAscii(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(8, "WAVE");
+  writeAscii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, "data");
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i += 1) {
+    const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
+    const pcmValue = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+    view.setInt16(offset, Math.round(pcmValue), true);
+    offset += 2;
+  }
+
+  return new Blob([buffer], { type: "audio/wav" });
+};
+
+const createTranscriptionAudioFile = async (file: File): Promise<File> => {
+  const isVideoOrAudio = file.type.startsWith("video/") || file.type.startsWith("audio/");
+  if (!isVideoOrAudio) {
+    return file;
+  }
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioContext = new AudioContext();
+    try {
+      const decodedAudio = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      const mono = downmixToMono(decodedAudio);
+      const resampled = resampleLinear(mono, decodedAudio.sampleRate, TRANSCRIPTION_SAMPLE_RATE);
+      const wavBlob = encodeMono16BitWav(resampled, TRANSCRIPTION_SAMPLE_RATE);
+
+      return new File([wavBlob], `${file.name.replace(/\.[^/.]+$/, "")}-transcribe.wav`, {
+        type: "audio/wav",
+        lastModified: Date.now(),
+      });
+    } finally {
+      await audioContext.close();
+    }
+  } catch {
+    return file;
+  }
+};
+
+const splitSubtitleText = (text: string, maxCharsPerChunk = 44): string[] => {
+  const words = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return [];
+  }
+
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerChunk) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) {
+      chunks.push(current);
+    }
+    current = word;
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+};
+
+const colorNameMap: Record<string, string> = {
+  white: "#ffffff",
+  black: "#000000",
+  yellow: "#ffd400",
+  red: "#ff3b30",
+  green: "#34c759",
+  blue: "#3b82f6",
+  orange: "#ff8a00",
+  pink: "#ff4fb3",
+  purple: "#7c4dff",
+  cyan: "#00c7d9",
+  "бел": "#ffffff",
+  "черн": "#000000",
+  "желт": "#ffd400",
+  "красн": "#ff3b30",
+  "зелен": "#34c759",
+  "син": "#3b82f6",
+  "оранж": "#ff8a00",
+  "розов": "#ff4fb3",
+  "фиолет": "#7c4dff",
+  "голуб": "#00c7d9",
+};
+
+const parseColorFromMessage = (message: string): string | null => {
+  const hexMatch = message.match(/#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/i);
+  if (hexMatch) {
+    return hexMatch[0];
+  }
+
+  const lowered = message.toLowerCase();
+  for (const [name, color] of Object.entries(colorNameMap)) {
+    if (lowered.includes(name)) {
+      return color;
+    }
+  }
+
+  return null;
+};
+
+const parseSubtitleGenerationPreferences = (userMessage: string): SubtitleGenerationPreferences => {
+  const wantsWordByWord =
+    /(word by word|single word|one word|каждое слово|по словам|по одному слову|быстрые субтитры|быстро)/i.test(
+      userMessage,
+    );
+
+  const isKaraokeStyle = /(karaoke|карaоке|тикток|tiktok|shorts|reels)/i.test(userMessage);
+  const isMinimalStyle = /(minimal|минимал|чист|plain|simple)/i.test(userMessage);
+  const wantsNoOutline = /(без обводки|no outline|outline off)/i.test(userMessage);
+  const wantsNoBackground = /(без фона|no background|transparent bg)/i.test(userMessage);
+
+  const requestedColor = parseColorFromMessage(userMessage);
+  const textColor = requestedColor ?? "#ffffff";
+  const outlineColor = wantsNoOutline ? null : "#000000";
+  const outlineWidth = wantsNoOutline ? 0 : isKaraokeStyle ? 4 : 3;
+  const backgroundColor = wantsNoBackground ? null : isKaraokeStyle ? "#000000" : null;
+  const backgroundOpacity = wantsNoBackground ? 0 : isKaraokeStyle ? 0.6 : 0;
+  const fontWeight = isMinimalStyle ? 600 : 700;
+  const fontSizePx = wantsWordByWord ? 44 : isKaraokeStyle ? 40 : 34;
+  const borderRadiusPx = backgroundColor ? 10 : 0;
+  const paddingXPx = backgroundColor ? 12 : 0;
+  const paddingYPx = backgroundColor ? 8 : 0;
+
+  const isTop = /(top|сверху|верх)/i.test(userMessage);
+  const isCenter = /(center|центр|по центру)/i.test(userMessage) && !isTop;
+
+  const previewY = isTop ? 0.08 : isCenter ? 0.4 : 0.74;
+  const previewHeight = wantsWordByWord ? 0.16 : 0.2;
+  const previewWidth = wantsWordByWord ? 0.64 : 0.78;
+  const previewX = (1 - previewWidth) / 2;
+
+  return {
+    timingMode: wantsWordByWord ? "word" : "phrase",
+    previewX,
+    previewY,
+    previewWidth,
+    previewHeight,
+    maxCharsPerChunk: wantsWordByWord ? 18 : 42,
+    style: {
+      textColor,
+      outlineColor,
+      outlineWidth,
+      backgroundColor,
+      backgroundOpacity,
+      fontWeight,
+      fontSizePx,
+      borderRadiusPx,
+      paddingXPx,
+      paddingYPx,
+    },
+  };
+};
+
+const buildSubtitleStyleFields = (style: SubtitleVisualStylePreferences) => ({
+  subtitleTextColor: style.textColor,
+  subtitleOutlineColor: style.outlineColor,
+  subtitleOutlineWidth: style.outlineWidth,
+  subtitleBackgroundColor: style.backgroundColor,
+  subtitleBackgroundOpacity: style.backgroundOpacity,
+  subtitleFontWeight: style.fontWeight,
+  subtitleFontSizePx: style.fontSizePx,
+  subtitleBorderRadiusPx: style.borderRadiusPx,
+  subtitlePaddingXPx: style.paddingXPx,
+  subtitlePaddingYPx: style.paddingYPx,
+});
+
+const createSubtitleEditingSchemaFromTranscript = (
+  transcriptSegments: TranscriptSegment[],
+  transcriptWords: TranscriptWord[],
+  sequence: TimelineSequence,
+  preferences: SubtitleGenerationPreferences,
+): EditingSchema => {
+  const frameRate = sequence.frameRate;
+  const toFrame = (seconds: number) => Math.max(0, Math.round(seconds * frameRate));
+
+  const wordsSource: TranscriptWord[] = transcriptWords
+    .map((word) => ({
+      startSeconds: Math.max(0, word.startSeconds),
+      endSeconds: Math.max(word.endSeconds, word.startSeconds + 0.01),
+      text: word.text.replace(/\s+/g, " ").trim(),
+    }))
+    .filter((word) => word.text.length > 0)
+    .sort((a, b) => a.startSeconds - b.startSeconds);
+
+  const subtitleFromWords = (() => {
+    if (wordsSource.length === 0) {
+      return [];
+    }
+
+    if (preferences.timingMode === "word") {
+      return wordsSource.map((word) => ({
+        name: word.text,
+        startFrame: toFrame(word.startSeconds),
+        durationFrames: Math.max(1, toFrame(word.endSeconds) - toFrame(word.startSeconds)),
+        source: "element" as const,
+        mediaUrl: null,
+        previewX: preferences.previewX,
+        previewY: preferences.previewY,
+        previewWidth: preferences.previewWidth,
+        previewHeight: preferences.previewHeight,
+        ...buildSubtitleStyleFields(preferences.style),
+      }));
+    }
+
+    const groups: Array<{ startSeconds: number; endSeconds: number; text: string }> = [];
+    let currentGroup: { startSeconds: number; endSeconds: number; text: string } | null = null;
+    const maxChars = preferences.maxCharsPerChunk;
+    const maxDurationSeconds = 2.8;
+    const maxGapSeconds = 0.32;
+
+    for (const word of wordsSource) {
+      if (!currentGroup) {
+        currentGroup = {
+          startSeconds: word.startSeconds,
+          endSeconds: word.endSeconds,
+          text: word.text,
+        };
+        continue;
+      }
+
+      const nextText: string = `${currentGroup.text} ${word.text}`;
+      const nextDuration = word.endSeconds - currentGroup.startSeconds;
+      const gap = Math.max(0, word.startSeconds - currentGroup.endSeconds);
+
+      if (nextText.length <= maxChars && nextDuration <= maxDurationSeconds && gap <= maxGapSeconds) {
+        currentGroup = {
+          startSeconds: currentGroup.startSeconds,
+          endSeconds: word.endSeconds,
+          text: nextText,
+        };
+        continue;
+      }
+
+      groups.push(currentGroup);
+      currentGroup = {
+        startSeconds: word.startSeconds,
+        endSeconds: word.endSeconds,
+        text: word.text,
+      };
+    }
+
+    if (currentGroup) {
+      groups.push(currentGroup);
+    }
+
+    return groups.map((group) => ({
+      name: group.text,
+      startFrame: toFrame(group.startSeconds),
+      durationFrames: Math.max(1, toFrame(group.endSeconds) - toFrame(group.startSeconds)),
+      source: "element" as const,
+      mediaUrl: null,
+      previewX: preferences.previewX,
+      previewY: preferences.previewY,
+      previewWidth: preferences.previewWidth,
+      previewHeight: preferences.previewHeight,
+      ...buildSubtitleStyleFields(preferences.style),
+    }));
+  })();
+
+  const subtitleFromSegments = transcriptSegments
+    .flatMap((segment) => {
+      const text = segment.text.replace(/\s+/g, " ").trim();
+      const durationSeconds = Math.max(segment.endSeconds - segment.startSeconds, 0.05);
+      if (!text) {
+        return [];
+      }
+
+      const chunks = splitSubtitleText(text, preferences.maxCharsPerChunk);
+      if (chunks.length <= 1) {
+        return [
+          {
+            name: text,
+            startFrame: toFrame(segment.startSeconds),
+            durationFrames: Math.max(1, toFrame(segment.endSeconds) - toFrame(segment.startSeconds)),
+            source: "element" as const,
+            mediaUrl: null,
+            previewX: preferences.previewX,
+            previewY: preferences.previewY,
+            previewWidth: preferences.previewWidth,
+            previewHeight: preferences.previewHeight,
+            ...buildSubtitleStyleFields(preferences.style),
+          },
+        ];
+      }
+
+      let wordsPassed = 0;
+      const totalWords = Math.max(text.split(" ").filter(Boolean).length, 1);
+
+      return chunks.map((chunk, index) => {
+        const wordsInChunk = Math.max(chunk.split(" ").filter(Boolean).length, 1);
+        const chunkStart = segment.startSeconds + (durationSeconds * wordsPassed) / totalWords;
+        wordsPassed += wordsInChunk;
+        const chunkEnd =
+          index === chunks.length - 1
+            ? segment.endSeconds
+            : segment.startSeconds + (durationSeconds * wordsPassed) / totalWords;
+
+        return {
+          name: chunk,
+          startFrame: toFrame(chunkStart),
+          durationFrames: Math.max(1, toFrame(chunkEnd) - toFrame(chunkStart)),
+          source: "element" as const,
+          mediaUrl: null,
+          previewX: preferences.previewX,
+          previewY: preferences.previewY,
+          previewWidth: preferences.previewWidth,
+          previewHeight: preferences.previewHeight,
+          ...buildSubtitleStyleFields(preferences.style),
+        };
+      });
+    })
+    .map((clip) => {
+      const maxStart = Math.max(sequence.durationFrames - 1, 0);
+      const safeStart = Math.min(Math.max(clip.startFrame, 0), maxStart);
+      const safeDuration = Math.max(1, Math.min(clip.durationFrames, sequence.durationFrames - safeStart));
+      return {
+        ...clip,
+        startFrame: safeStart,
+        durationFrames: safeDuration,
+      };
+    })
+    .filter((clip) => clip.durationFrames > 0)
+    .sort((a, b) => a.startFrame - b.startFrame);
+
+  const subtitleClips = subtitleFromWords.length > 0 ? subtitleFromWords : subtitleFromSegments;
+
+  return {
+    version: "1.0",
+    assistantMessage:
+      preferences.timingMode === "word"
+        ? "Субтитры добавлены в режиме по словам с выбранным стилем."
+        : "Субтитры добавлены фразами с выбранным стилем.",
+    durationFrames: null,
+    tracks: [
+      {
+        type: "subtitle",
+        index: 0,
+        clips: subtitleClips,
+      },
+    ],
+  };
+};const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
   if (item.source === "asset" && item.mediaType === "video") {
     return {
       previewX: 0,
@@ -434,9 +1150,15 @@ export default function Home() {
   const [jsonStatus, setJsonStatus] = useState<string | null>(null);
   const [aiMessageDraft, setAiMessageDraft] = useState("");
   const [aiMessages, setAiMessages] = useState<AiEditMessage[]>([]);
-  const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [, setAiStatus] = useState<string | null>(null);
   const [isAiRequestInFlight, setIsAiRequestInFlight] = useState(false);
+  const [showAiThinking, setShowAiThinking] = useState(false);
+  const [toolPanelWidth, setToolPanelWidth] = useState(360);
+  const [transcriptByAssetId, setTranscriptByAssetId] = useState<Record<string, TranscriptSegment[]>>({});
+  const [transcriptWordsByAssetId, setTranscriptWordsByAssetId] = useState<Record<string, TranscriptWord[]>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const chatThreadEndRef = useRef<HTMLDivElement | null>(null);
   const currentSequenceRef = useRef<TimelineSequence>(timelineSequence);
 
   const activeItem = sidebarItems.find((item) => item.id === activeItemId) ?? null;
@@ -454,6 +1176,53 @@ export default function Home() {
       });
     };
   }, [assets]);
+
+  useEffect(() => {
+    chatThreadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [aiMessages, isAiRequestInFlight]);
+
+  useEffect(() => {
+    const clampWidth = () => {
+      const workspaceWidth = workspaceRef.current?.clientWidth ?? 0;
+      if (!workspaceWidth) {
+        return;
+      }
+      const maxAllowed = Math.max(TOOL_PANEL_MIN_WIDTH, Math.floor(workspaceWidth * 0.5));
+      setToolPanelWidth((currentWidth) => Math.min(Math.max(currentWidth, TOOL_PANEL_MIN_WIDTH), maxAllowed));
+    };
+
+    clampWidth();
+    window.addEventListener("resize", clampWidth);
+
+    return () => {
+      window.removeEventListener("resize", clampWidth);
+    };
+  }, []);
+
+  const streamAssistantText = async (fullText: string) => {
+    const text = fullText.trim();
+    if (!text) {
+      return;
+    }
+
+    setShowAiThinking(false);
+
+    const messageId = `assistant-${crypto.randomUUID()}`;
+    setAiMessages((currentMessages) => [...currentMessages, { id: messageId, role: "assistant", text: "" }]);
+
+    let cursor = 0;
+    while (cursor < text.length) {
+      cursor = Math.min(cursor + STREAMING_CHUNK_SIZE, text.length);
+      const nextText = text.slice(0, cursor);
+      setAiMessages((currentMessages) =>
+        currentMessages.map((message) => (message.id === messageId ? { ...message, text: nextText } : message)),
+      );
+      // Smooth visible streaming in the chat bubble.
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), STREAMING_STEP_MS);
+      });
+    }
+  };
 
   const appendFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) {
@@ -603,6 +1372,43 @@ export default function Home() {
     }
   };
 
+  const handleAiInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    if (!isAiRequestInFlight) {
+      void handleAiEditSubmit();
+    }
+  };
+
+  const handleToolPanelResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!workspaceRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = toolPanelWidth;
+    const maxWidth = Math.max(TOOL_PANEL_MIN_WIDTH, Math.floor(workspaceRef.current.clientWidth * 0.5));
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth = Math.min(Math.max(startWidth + delta, TOOL_PANEL_MIN_WIDTH), maxWidth);
+      setToolPanelWidth(nextWidth);
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+
   const handleAiEditSubmit = async () => {
     const trimmedMessage = aiMessageDraft.trim();
     if (!trimmedMessage) {
@@ -619,8 +1425,107 @@ export default function Home() {
     setAiMessageDraft("");
     setAiStatus("Generating editing schema...");
     setIsAiRequestInFlight(true);
+    setShowAiThinking(true);
 
     try {
+      const isSubtitleRequest = SUBTITLE_REQUEST_PATTERN.test(trimmedMessage);
+      let transcriptSegments: TranscriptSegment[] = [];
+      let transcriptWords: TranscriptWord[] = [];
+
+      if (isSubtitleRequest) {
+        const transcriptionAsset = getTranscriptionCandidate(assets);
+
+        if (!transcriptionAsset) {
+          await streamAssistantText("Cannot create real subtitles: no video or audio source was found for transcription.");
+          setAiStatus("Transcription source is missing.");
+          return;
+        }
+
+        const cachedTranscript = transcriptByAssetId[transcriptionAsset.id];
+        const cachedWords = transcriptWordsByAssetId[transcriptionAsset.id];
+        if (cachedTranscript && cachedTranscript.length > 0) {
+          transcriptSegments = cachedTranscript;
+          transcriptWords = cachedWords ?? [];
+        } else {
+          setAiStatus(`Transcribing ${transcriptionAsset.file.name}...`);
+
+          const preparedTranscriptionFile = await createTranscriptionAudioFile(transcriptionAsset.file);
+          const transcriptionForm = new FormData();
+          transcriptionForm.append(
+            "file",
+            preparedTranscriptionFile,
+            preparedTranscriptionFile.name,
+          );
+
+          const transcriptionResponse = await fetch("/api/transcribe", {
+            method: "POST",
+            body: transcriptionForm,
+          });
+
+          const transcriptionPayload = (await transcriptionResponse.json()) as TranscriptionRouteResponse;
+
+          if (!transcriptionResponse.ok || !transcriptionPayload.segments?.length) {
+            const errorText = transcriptionPayload.error ?? "Transcription request failed.";
+            const extraDetails = transcriptionPayload.details ? ` ${transcriptionPayload.details}` : "";
+            await streamAssistantText(`${errorText}${extraDetails}`.trim());
+            setAiStatus("Transcription failed.");
+            return;
+          }
+
+          transcriptSegments = transcriptionPayload.segments;
+          transcriptWords = Array.isArray(transcriptionPayload.words) ? transcriptionPayload.words : [];
+          setTranscriptByAssetId((current) => ({
+            ...current,
+            [transcriptionAsset.id]: transcriptionPayload.segments ?? [],
+          }));
+          setTranscriptWordsByAssetId((current) => ({
+            ...current,
+            [transcriptionAsset.id]: transcriptionPayload.words ?? [],
+          }));
+        }
+
+        const subtitlePreferences = parseSubtitleGenerationPreferences(trimmedMessage);
+        const directSubtitleSchema = createSubtitleEditingSchemaFromTranscript(
+          transcriptSegments,
+          transcriptWords,
+          currentSequenceRef.current,
+          subtitlePreferences,
+        );
+        const nextSequence = applyEditingSchemaToTimeline(
+          currentSequenceRef.current,
+          directSubtitleSchema,
+        );
+
+        setTimelineSequence(nextSequence);
+        currentSequenceRef.current = nextSequence;
+        setTimelinePanelKey((current) => current + 1);
+        await streamAssistantText(directSubtitleSchema.assistantMessage);
+        setAiStatus("Real subtitle track applied from transcript.");
+        return;
+      }
+
+      let assistantMessageId: string | null = null;
+      let hasReceivedAssistantDelta = false;
+
+      const ensureAssistantMessage = () => {
+        if (assistantMessageId) {
+          return assistantMessageId;
+        }
+        const nextId = `assistant-${crypto.randomUUID()}`;
+        assistantMessageId = nextId;
+        setAiMessages((currentMessages) => [...currentMessages, { id: nextId, role: "assistant", text: "" }]);
+        return nextId;
+      };
+
+      const patchAssistantMessage = (applyPatch: (previousText: string) => string) => {
+        const targetMessageId = ensureAssistantMessage();
+        setAiMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === targetMessageId ? { ...message, text: applyPatch(message.text) } : message,
+          ),
+        );
+      };
+
       const response = await fetch("/api/ai-edit", {
         method: "POST",
         headers: {
@@ -630,28 +1535,92 @@ export default function Home() {
           userMessage: trimmedMessage,
           assets: buildAiAssetContext(assets),
           currentSequence: currentSequenceRef.current,
+          transcriptSegments,
         }),
       });
 
-      const payload = (await response.json()) as AiEditRouteResponse;
-
-      if (!response.ok || !payload.editingSchema) {
-        const errorText = payload.error ?? "AI Edit request failed.";
-        const extraDetails = payload.details ? ` ${payload.details}` : "";
-        setAiMessages((currentMessages) => [
-          ...currentMessages,
-          {
-            id: `assistant-${crypto.randomUUID()}`,
-            role: "assistant",
-            text: `${errorText}${extraDetails}`.trim(),
-          },
-        ]);
+      if (!response.ok) {
+        setShowAiThinking(false);
+        let fallbackError = "AI Edit request failed.";
+        try {
+          const payload = (await response.json()) as AiEditRouteResponse;
+          const errorText = payload.error ?? fallbackError;
+          const extraDetails = payload.details ? ` ${payload.details}` : "";
+          fallbackError = `${errorText}${extraDetails}`.trim();
+        } catch {
+          // Keep fallback error text.
+        }
+        patchAssistantMessage(() => fallbackError);
         setAiStatus("Failed to apply AI editing schema.");
         return;
       }
 
-      const editingSchema = payload.editingSchema;
+      if (!response.body) {
+        setShowAiThinking(false);
+        patchAssistantMessage(() => "AI Edit stream is empty.");
+        setAiStatus("Failed to apply AI editing schema.");
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let streamBuffer = "";
+      let editingSchema: EditingSchema | null = null;
+      let streamError: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        streamBuffer += decoder.decode(value, { stream: true });
+
+        let lineBreakIndex = streamBuffer.indexOf("\n");
+        while (lineBreakIndex !== -1) {
+          const line = streamBuffer.slice(0, lineBreakIndex).trim();
+          streamBuffer = streamBuffer.slice(lineBreakIndex + 1);
+
+          if (line) {
+            try {
+              const streamEvent = JSON.parse(line) as AiEditStreamEvent;
+              if (streamEvent.type === "assistant_delta" && typeof streamEvent.delta === "string") {
+                if (!hasReceivedAssistantDelta) {
+                  setShowAiThinking(false);
+                }
+                patchAssistantMessage((previousText) => {
+                  if (!hasReceivedAssistantDelta) {
+                    hasReceivedAssistantDelta = true;
+                    return streamEvent.delta;
+                  }
+                  return previousText + streamEvent.delta;
+                });
+              } else if (streamEvent.type === "error") {
+                setShowAiThinking(false);
+                const details = streamEvent.details ? ` ${streamEvent.details}` : "";
+                streamError = `${streamEvent.error}${details}`.trim();
+                patchAssistantMessage(() => streamError ?? "AI Edit stream error.");
+              } else if (streamEvent.type === "done") {
+                setShowAiThinking(false);
+                editingSchema = streamEvent.editingSchema;
+                patchAssistantMessage(() => streamEvent.editingSchema.assistantMessage);
+              }
+            } catch {
+              // Ignore malformed line and continue stream parsing.
+            }
+          }
+
+          lineBreakIndex = streamBuffer.indexOf("\n");
+        }
+      }
+
+      if (streamError) {
+        setAiStatus("Failed to apply AI editing schema.");
+        return;
+      }
+
       if (!editingSchema) {
+        patchAssistantMessage((previousText) => previousText || "AI Edit stream completed without schema.");
         setAiStatus("AI response did not include editing schema.");
         return;
       }
@@ -664,27 +1633,14 @@ export default function Home() {
       setTimelineSequence(nextSequence);
       currentSequenceRef.current = nextSequence;
       setTimelinePanelKey((current) => current + 1);
-      setAiMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: `assistant-${crypto.randomUUID()}`,
-          role: "assistant",
-          text: editingSchema.assistantMessage,
-        },
-      ]);
       setAiStatus("Editing schema applied to timeline.");
     } catch {
-      setAiMessages((currentMessages) => [
-        ...currentMessages,
-        {
-          id: `assistant-${crypto.randomUUID()}`,
-          role: "assistant",
-          text: "Network error while requesting OpenAI API.",
-        },
-      ]);
+      setShowAiThinking(false);
+      await streamAssistantText("Network error while requesting OpenAI API.");
       setAiStatus("Network error.");
     } finally {
       setIsAiRequestInFlight(false);
+      setShowAiThinking(false);
     }
   };
 
@@ -709,7 +1665,6 @@ export default function Home() {
     if (activeItem.id === "json") {
       return (
         <>
-          <h2 className={styles.toolPanelTitle}>JSON Timeline</h2>
           <div className={styles.jsonActionRow}>
             <button type="button" className={styles.secondaryAction} onClick={handleLoadCurrentJson}>
               Load current
@@ -739,32 +1694,57 @@ export default function Home() {
     if (activeItem.id === "ai-edit") {
       return (
         <>
-          <h2 className={styles.toolPanelTitle}>AI Edit</h2>
           <div className={styles.chatThread}>
             {aiMessages.map((message) => (
-              <p
+              <div
                 key={message.id}
-                className={message.role === "user" ? styles.chatMessage : styles.chatMessageAssistant}
+                className={message.role === "user" ? styles.chatRowUser : styles.chatRowAssistant}
               >
-                {message.text}
-              </p>
+                <article className={message.role === "user" ? styles.chatBubbleUser : styles.chatBubbleAssistant}>
+                  {message.role === "assistant" ? (
+                    <div className={styles.chatMarkdown}>{renderMarkdownMessage(message.text)}</div>
+                  ) : (
+                    <p className={styles.chatPlainText}>{message.text}</p>
+                  )}
+                </article>
+              </div>
             ))}
+            {showAiThinking ? (
+              <div className={styles.chatRowAssistant}>
+                <article className={`${styles.chatBubbleAssistant} ${styles.chatThinkingBubble}`}>
+                  <div className={styles.chatThinkingDots} aria-label="AI is thinking">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </article>
+              </div>
+            ) : null}
+            <div ref={chatThreadEndRef} />
           </div>
-          <textarea
-            className={styles.chatInput}
-            value={aiMessageDraft}
-            onChange={(event) => setAiMessageDraft(event.target.value)}
-            placeholder="Describe the edit you need..."
-          />
-          <button
-            type="button"
-            className={styles.primaryAction}
-            onClick={() => void handleAiEditSubmit()}
-            disabled={isAiRequestInFlight}
-          >
-            Send
-          </button>
-          {aiStatus ? <p className={styles.jsonStatus}>{aiStatus}</p> : null}
+          <div className={styles.chatComposer}>
+            <div className={styles.chatInputWrap}>
+              <textarea
+                className={styles.chatInput}
+                value={aiMessageDraft}
+                onChange={(event) => setAiMessageDraft(event.target.value)}
+                onKeyDown={handleAiInputKeyDown}
+                placeholder="Describe the edit you need..."
+              />
+              <button
+                type="button"
+                className={styles.chatSendInline}
+                onClick={() => void handleAiEditSubmit()}
+                disabled={isAiRequestInFlight || aiMessageDraft.trim().length === 0}
+                aria-label="Send message"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 12h11" />
+                  <path d="M13 6l6 6-6 6" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </>
       );
     }
@@ -772,7 +1752,6 @@ export default function Home() {
     if (activeItem.id === "assets") {
       return (
         <>
-          <h2 className={styles.toolPanelTitle}>Assets</h2>
           <input
             ref={fileInputRef}
             type="file"
@@ -848,7 +1827,6 @@ export default function Home() {
     if (activeItem.id === "elements") {
       return (
         <>
-          <h2 className={styles.toolPanelTitle}>Elements</h2>
           <p className={styles.libraryIntro}>Drag any element to the matching timeline track.</p>
           <div className={styles.assetList}>
             {elementSections.map((section) => (
@@ -888,8 +1866,7 @@ export default function Home() {
     if (activeItem.id === "text") {
       return (
         <>
-          <h2 className={styles.toolPanelTitle}>Text</h2>
-          <p className={styles.libraryIntro}>Готовые типографические пресеты: от H1 до subtitle и body.</p>
+          <p className={styles.libraryIntro}>Ready-made typography presets: from H1 to subtitle and body.</p>
           <div className={styles.assetList}>
             {textSections.map((section) => (
               <section key={section.id} className={styles.librarySection}>
@@ -927,7 +1904,6 @@ export default function Home() {
 
     return (
       <>
-        <h2 className={styles.toolPanelTitle}>{activeItem.label}</h2>
         <p className={styles.toolPanelText}>Panel for {activeItem.label} will appear here.</p>
       </>
     );
@@ -935,35 +1911,92 @@ export default function Home() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.leftRail}>
-        <aside className={styles.sidebar} aria-label="Editor tools">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`${styles.sidebarItem} ${
-                activeItemId === item.id ? styles.sidebarItemActive : ""
-              }`}
-              onClick={() => handleSidebarItemClick(item.id)}
-            >
-              <span className={styles.sidebarIcon} aria-hidden="true">
-                {item.icon}
-              </span>
-              <span className={styles.sidebarLabel}>{item.label}</span>
-            </button>
-          ))}
-        </aside>
-        {activeItem ? <aside className={styles.toolPanel}>{renderSidebarPanel()}</aside> : null}
+      <div ref={workspaceRef} className={styles.workspace}>
+        <div className={styles.leftRail}>
+          <header className={`${styles.columnHeader} ${styles.leftRailHeader}`} aria-label="Tools header">
+            <span className={styles.topHeaderBrandMark} aria-hidden="true">
+              V
+            </span>
+          </header>
+          <aside className={styles.sidebar} aria-label="Editor tools">
+            {sidebarItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`${styles.sidebarItem} ${
+                  activeItemId === item.id ? styles.sidebarItemActive : ""
+                }`}
+                onClick={() => handleSidebarItemClick(item.id)}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <span className={styles.sidebarIcon} aria-hidden="true">
+                  <SidebarNavIcon itemId={item.id} />
+                </span>
+                <span className={styles.sidebarItemLabel}>{item.label}</span>
+              </button>
+            ))}
+          </aside>
+        </div>
+        {activeItem ? (
+          <div
+            className={styles.toolPanelColumn}
+            style={{ width: toolPanelWidth, minWidth: toolPanelWidth, maxWidth: toolPanelWidth }}
+          >
+            <header className={styles.columnHeader} aria-label="Panel header">
+              <span className={styles.panelHeaderTitle}>{activeItem.label}</span>
+            </header>
+            <aside className={styles.toolPanel}>{renderSidebarPanel()}</aside>
+            <div
+              className={styles.toolPanelResizeHandle}
+              onPointerDown={handleToolPanelResizeStart}
+              role="separator"
+              aria-label="Resize sidebar panel"
+              aria-orientation="vertical"
+            />
+          </div>
+        ) : null}
+        <section className={styles.editorColumn}>
+          <header className={`${styles.columnHeader} ${styles.editorHeader}`} aria-label="Preview header">
+            <div className={styles.previewHeaderLeft}>
+              <button type="button" className={styles.previewHeaderGhostButton} aria-label="Layout">
+                []
+              </button>
+              <button type="button" className={styles.previewHeaderModeButton}>
+                <span className={styles.previewHeaderModeDot} aria-hidden="true" />
+                RVE
+              </button>
+            </div>
+            <div className={styles.previewHeaderRight}>
+              <button type="button" className={styles.previewHeaderGhostButton} aria-label="History">
+                H
+              </button>
+              <button type="button" className={styles.previewHeaderGhostButton} aria-label="Notifications">
+                N
+              </button>
+              <button type="button" className={styles.previewHeaderPrimaryAction}>
+                Render Video
+              </button>
+            </div>
+          </header>
+          <div className={styles.editorContent}>
+            <TimelinePanel
+              key={timelinePanelKey}
+              sequence={timelineSequence}
+              onSequenceChange={(nextSequence) => {
+                currentSequenceRef.current = nextSequence;
+              }}
+            />
+          </div>
+        </section>
       </div>
-      <section className={styles.editorContent}>
-        <TimelinePanel
-          key={timelinePanelKey}
-          sequence={timelineSequence}
-          onSequenceChange={(nextSequence) => {
-            currentSequenceRef.current = nextSequence;
-          }}
-        />
-      </section>
     </main>
   );
 }
+
+
+
+
+
+
+

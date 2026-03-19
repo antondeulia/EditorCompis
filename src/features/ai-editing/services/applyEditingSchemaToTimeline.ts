@@ -1,4 +1,4 @@
-import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
+﻿import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
 import {
   TimelineClip,
   TimelineSequence,
@@ -115,6 +115,18 @@ const toTimelineClip = (
     previewY: clip.previewY ?? subtitleDefaults?.previewY ?? undefined,
     previewWidth: clip.previewWidth ?? subtitleDefaults?.previewWidth ?? undefined,
     previewHeight: clip.previewHeight ?? subtitleDefaults?.previewHeight ?? undefined,
+    subtitleStyle: {
+      subtitleTextColor: clip.subtitleTextColor ?? undefined,
+      subtitleOutlineColor: clip.subtitleOutlineColor ?? undefined,
+      subtitleOutlineWidth: clip.subtitleOutlineWidth ?? undefined,
+      subtitleBackgroundColor: clip.subtitleBackgroundColor ?? undefined,
+      subtitleBackgroundOpacity: clip.subtitleBackgroundOpacity ?? undefined,
+      subtitleFontWeight: clip.subtitleFontWeight ?? undefined,
+      subtitleFontSizePx: clip.subtitleFontSizePx ?? undefined,
+      subtitleBorderRadiusPx: clip.subtitleBorderRadiusPx ?? undefined,
+      subtitlePaddingXPx: clip.subtitlePaddingXPx ?? undefined,
+      subtitlePaddingYPx: clip.subtitlePaddingYPx ?? undefined,
+    },
   };
 };
 
@@ -161,3 +173,5 @@ export const applyEditingSchemaToTimeline = (
     tracks: nextTracks,
   };
 };
+
+

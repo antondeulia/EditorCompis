@@ -1,28 +1,33 @@
 import { NextResponse } from "next/server";
 
 import {
+  AiEditorAssetContext,
+  AiEditorTranscriptSegment,
+  buildVideoEditorSystemPrompt,
+  buildVideoEditorUserPrompt,
+  DEFAULT_AI_EDIT_MODEL,
+} from "@/features/ai-editing/agent/editorAgent";
+import {
   EDITING_SCHEMA_JSON_SCHEMA,
   isEditingSchema,
 } from "@/features/ai-editing/types/editingSchema";
 import { TimelineSequence } from "@/features/timeline/types/timeline";
 
-interface AiEditAssetContext {
-  id: string;
-  name: string;
-  mediaType: "video" | "audio" | "subtitle" | "unknown";
-  durationFrames: number | null;
-}
-
 interface AiEditRequestBody {
   userMessage?: string;
   apiKey?: string;
-  assets?: AiEditAssetContext[];
+  assets?: AiEditorAssetContext[];
   currentSequence?: TimelineSequence;
+  transcriptSegments?: AiEditorTranscriptSegment[];
   model?: string;
 }
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5-mini";
+const STREAM_HEADERS = {
+  "Content-Type": "application/x-ndjson; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
+};
 
 const isTimelineSequenceLike = (value: unknown): value is TimelineSequence => {
   if (!value || typeof value !== "object") {
@@ -84,38 +89,130 @@ const extractResponseText = (payload: unknown): string => {
   return "";
 };
 
-const buildSystemPrompt = () =>
-  [
-    "You are an AI video editing planner.",
-    "Return only valid JSON in the requested schema.",
-    "Build an EditingSchema that can be applied directly to a timeline.",
-    "Use only provided assets when source is 'asset'.",
-    "Keep frame ranges inside sequence duration.",
-    "Set track index as index among tracks of same type: 0 means first track of that type.",
-    "Use type subtitle for subtitle/caption lines and source element for these clips.",
-    "Subtitle clip.name must contain the actual subtitle text to show on screen.",
-    "assistantMessage must be short and practical.",
-  ].join(" ");
+const extractDeltaText = (eventPayload: unknown): string => {
+  if (!eventPayload || typeof eventPayload !== "object") {
+    return "";
+  }
 
-const buildUserPrompt = (
-  userMessage: string,
-  assets: AiEditAssetContext[],
-  currentSequence: TimelineSequence,
-) =>
-  JSON.stringify(
-    {
-      userRequest: userMessage,
-      assets,
-      currentSequence,
-      notes: [
-        "Prefer deterministic editing decisions.",
-        "If user asks to rebuild montage, provide full clips list for relevant tracks.",
-        "When user asks for subtitles, create subtitle track clips with short readable text chunks.",
-      ],
-    },
-    null,
-    2,
-  );
+  const maybeDelta = (eventPayload as { delta?: unknown }).delta;
+  if (typeof maybeDelta === "string" && maybeDelta.length > 0) {
+    return maybeDelta;
+  }
+
+  const maybeText = (eventPayload as { text?: unknown }).text;
+  if (typeof maybeText === "string" && maybeText.length > 0) {
+    return maybeText;
+  }
+
+  return "";
+};
+
+const extractJsonCandidate = (raw: string): string => {
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  if (firstBrace < 0 || lastBrace <= firstBrace) {
+    return raw;
+  }
+  return raw.slice(firstBrace, lastBrace + 1);
+};
+
+const extractAssistantMessageFromPartialJson = (rawJson: string): string | null => {
+  const keyMatch = /"assistantMessage"\s*:\s*"/.exec(rawJson);
+  if (!keyMatch) {
+    return null;
+  }
+
+  let cursor = keyMatch.index + keyMatch[0].length;
+  let decoded = "";
+  let isEscaping = false;
+
+  while (cursor < rawJson.length) {
+    const char = rawJson[cursor];
+
+    if (isEscaping) {
+      if (char === "u") {
+        const codePoint = rawJson.slice(cursor + 1, cursor + 5);
+        if (!/^[0-9a-fA-F]{4}$/.test(codePoint)) {
+          break;
+        }
+        decoded += String.fromCharCode(Number.parseInt(codePoint, 16));
+        cursor += 5;
+        isEscaping = false;
+        continue;
+      }
+
+      if (char === "n") {
+        decoded += "\n";
+      } else if (char === "r") {
+        decoded += "\r";
+      } else if (char === "t") {
+        decoded += "\t";
+      } else if (char === "b") {
+        decoded += "\b";
+      } else if (char === "f") {
+        decoded += "\f";
+      } else {
+        decoded += char;
+      }
+
+      cursor += 1;
+      isEscaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      isEscaping = true;
+      cursor += 1;
+      continue;
+    }
+
+    if (char === "\"") {
+      return decoded;
+    }
+
+    decoded += char;
+    cursor += 1;
+  }
+
+  return decoded;
+};
+
+const sanitizeTranscriptSegments = (value: unknown): AiEditorTranscriptSegment[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((segment) => {
+      if (!segment || typeof segment !== "object") {
+        return null;
+      }
+
+      const typed = segment as Partial<AiEditorTranscriptSegment>;
+      if (
+        typeof typed.startSeconds !== "number" ||
+        !Number.isFinite(typed.startSeconds) ||
+        typeof typed.endSeconds !== "number" ||
+        !Number.isFinite(typed.endSeconds) ||
+        typed.endSeconds <= typed.startSeconds ||
+        typeof typed.text !== "string"
+      ) {
+        return null;
+      }
+
+      const text = typed.text.trim();
+      if (!text) {
+        return null;
+      }
+
+      return {
+        startSeconds: Math.max(0, typed.startSeconds),
+        endSeconds: Math.max(typed.endSeconds, typed.startSeconds + 0.01),
+        text,
+      };
+    })
+    .filter((segment): segment is AiEditorTranscriptSegment => segment !== null);
+};
 
 export async function POST(request: Request) {
   try {
@@ -149,10 +246,11 @@ export async function POST(request: Request) {
     }
 
     const assets = Array.isArray(body.assets) ? body.assets : [];
+    const transcriptSegments = sanitizeTranscriptSegments(body.transcriptSegments);
     const model =
       typeof body.model === "string" && body.model.trim().length > 0
         ? body.model.trim()
-        : DEFAULT_MODEL;
+        : DEFAULT_AI_EDIT_MODEL;
 
     const openAiResponse = await fetch(OPENAI_RESPONSES_URL, {
       method: "POST",
@@ -162,14 +260,20 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
+        stream: true,
         input: [
           {
             role: "system",
-            content: buildSystemPrompt(),
+            content: buildVideoEditorSystemPrompt(),
           },
           {
             role: "user",
-            content: buildUserPrompt(userMessage, assets, currentSequence),
+            content: buildVideoEditorUserPrompt({
+              userMessage,
+              assets,
+              currentSequence,
+              transcriptSegments,
+            }),
           },
         ],
         text: {
@@ -185,47 +289,168 @@ export async function POST(request: Request) {
 
     if (!openAiResponse.ok) {
       const errorText = await openAiResponse.text();
-      return NextResponse.json(
-        {
-          error: `OpenAI request failed (${openAiResponse.status}).`,
-          details: errorText.slice(0, 1000),
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          controller.enqueue(
+            encoder.encode(
+              `${JSON.stringify({
+                type: "error",
+                error: `OpenAI request failed (${openAiResponse.status}).`,
+                details: errorText.slice(0, 1000),
+              })}\n`,
+            ),
+          );
+          controller.close();
         },
-        { status: 502 },
-      );
+      });
+      return new Response(stream, { status: 200, headers: STREAM_HEADERS });
     }
 
-    const openAiPayload = (await openAiResponse.json()) as unknown;
-    const rawText = extractResponseText(openAiPayload);
-
-    if (!rawText) {
-      return NextResponse.json(
-        { error: "OpenAI returned empty response." },
-        { status: 502 },
-      );
+    if (!openAiResponse.body) {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: "error", error: "OpenAI stream is empty." })}\n`));
+          controller.close();
+        },
+      });
+      return new Response(stream, { status: 200, headers: STREAM_HEADERS });
     }
 
-    let parsedSchema: unknown;
-    try {
-      parsedSchema = JSON.parse(rawText);
-    } catch {
-      return NextResponse.json(
-        { error: "OpenAI returned non-JSON response." },
-        { status: 502 },
-      );
-    }
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const reader = openAiResponse.body!.getReader();
+        const decoder = new TextDecoder();
 
-    if (!isEditingSchema(parsedSchema)) {
-      return NextResponse.json(
-        { error: "OpenAI returned JSON that does not match EditingSchema." },
-        { status: 502 },
-      );
-    }
+        const emit = (payload: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+        };
 
-    return NextResponse.json({
-      editingSchema: parsedSchema,
-      usage: (openAiPayload as { usage?: unknown }).usage ?? null,
-      model,
+        let buffer = "";
+        let rawJsonText = "";
+        let streamedAssistantChars = 0;
+        let completedResponsePayload: unknown = null;
+
+        const tryEmitAssistantDelta = () => {
+          const partialMessage = extractAssistantMessageFromPartialJson(rawJsonText);
+          if (partialMessage === null || partialMessage.length <= streamedAssistantChars) {
+            return;
+          }
+          const delta = partialMessage.slice(streamedAssistantChars);
+          streamedAssistantChars = partialMessage.length;
+          emit({ type: "assistant_delta", delta });
+        };
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+
+            let boundaryIndex = buffer.indexOf("\n\n");
+            while (boundaryIndex !== -1) {
+              const eventBlock = buffer.slice(0, boundaryIndex);
+              buffer = buffer.slice(boundaryIndex + 2);
+
+              const dataLines = eventBlock
+                .split("\n")
+                .filter((line) => line.startsWith("data:"))
+                .map((line) => line.slice(5).trimStart());
+
+              if (dataLines.length > 0) {
+                const dataValue = dataLines.join("\n");
+                if (dataValue === "[DONE]") {
+                  boundaryIndex = buffer.indexOf("\n\n");
+                  continue;
+                }
+
+                try {
+                  const parsedEvent = JSON.parse(dataValue) as { type?: unknown; response?: unknown };
+                  const eventType = typeof parsedEvent.type === "string" ? parsedEvent.type : "";
+
+                  if (eventType === "error") {
+                    emit({ type: "error", error: "OpenAI streaming error.", details: dataValue.slice(0, 1000) });
+                    controller.close();
+                    return;
+                  }
+
+                  const isJsonTextDelta =
+                    eventType === "response.output_text.delta" || eventType === "response.delta";
+                  const deltaChunk = isJsonTextDelta ? extractDeltaText(parsedEvent) : "";
+                  if (deltaChunk.length > 0) {
+                    rawJsonText += deltaChunk;
+                    tryEmitAssistantDelta();
+                  }
+
+                  if (eventType === "response.completed") {
+                    completedResponsePayload = parsedEvent.response;
+                  }
+                } catch {
+                  // Ignore malformed single events and continue reading stream.
+                }
+              }
+
+              boundaryIndex = buffer.indexOf("\n\n");
+            }
+          }
+
+          const completedText = completedResponsePayload
+            ? extractResponseText(completedResponsePayload)
+            : "";
+          const preferredRawText = completedText.trim().length > 0 ? completedText : rawJsonText;
+
+          if (!preferredRawText.trim()) {
+            emit({ type: "error", error: "OpenAI returned empty response." });
+            controller.close();
+            return;
+          }
+
+          let parsedSchema: unknown;
+          try {
+            parsedSchema = JSON.parse(preferredRawText);
+          } catch {
+            try {
+              parsedSchema = JSON.parse(extractJsonCandidate(preferredRawText));
+            } catch {
+              emit({ type: "error", error: "OpenAI returned non-JSON response." });
+              controller.close();
+              return;
+            }
+          }
+
+          if (!isEditingSchema(parsedSchema)) {
+            emit({ type: "error", error: "OpenAI returned JSON that does not match EditingSchema." });
+            controller.close();
+            return;
+          }
+
+          if (parsedSchema.assistantMessage.length > streamedAssistantChars) {
+            emit({
+              type: "assistant_delta",
+              delta: parsedSchema.assistantMessage.slice(streamedAssistantChars),
+            });
+          }
+
+          emit({
+            type: "done",
+            editingSchema: parsedSchema,
+            usage: (completedResponsePayload as { usage?: unknown } | null)?.usage ?? null,
+            model,
+          });
+          controller.close();
+        } catch {
+          emit({ type: "error", error: "Unexpected AI Edit server error." });
+          controller.close();
+        }
+      },
     });
+
+    return new Response(stream, { status: 200, headers: STREAM_HEADERS });
   } catch {
     return NextResponse.json(
       { error: "Unexpected AI Edit server error." },

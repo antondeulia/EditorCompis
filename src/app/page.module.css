@@ -1,6 +1,6 @@
 .page {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
   align-items: stretch;
   justify-content: flex-start;
@@ -9,107 +9,270 @@
   background: #ffffff;
 }
 
-.leftRail {
+.workspace {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.leftRail {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
   align-items: stretch;
-  height: 100vh;
-  min-height: 100vh;
-  min-width: 72px;
+  height: 100%;
+  min-height: 100%;
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
   flex-shrink: 0;
+  border-right: 1px solid #d4d4d4;
+  background: #f3f3f3;
+}
+
+.columnHeader {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid #d8deea;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+}
+
+.leftRailHeader {
+  justify-content: center;
+  padding: 0;
+}
+
+.topHeaderBrandMark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #3f78db 0%, #2156b0 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .sidebar {
-  width: 72px;
-  min-width: 72px;
-  height: 100vh;
-  min-height: 100vh;
-  padding: 12px 0;
-  border-right: 1px solid #d4d4d4;
-  background: #f3f3f3;
+  width: 88px;
+  min-width: 88px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 0;
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sidebarItem {
-  width: 62px;
-  min-height: 70px;
-  padding: 7px 4px;
+  width: 72px;
+  min-height: 74px;
+  padding: 7px 6px 8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
   color: #334054;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 .sidebarItem:hover {
-  background: #e4e9f2;
+  background: linear-gradient(180deg, #e5edfb 0%, #d9e5f8 100%);
   color: #152136;
+  box-shadow: 0 7px 16px rgb(54 90 146 / 16%);
+  transform: translateY(-1px);
 }
 
 .sidebarItemActive {
-  background: #d7e3f5;
+  background: linear-gradient(180deg, #cfe0fa 0%, #bfd4f5 100%);
   color: #111d31;
+  box-shadow: inset 0 0 0 1px rgb(75 118 181 / 28%), 0 8px 18px rgb(41 83 145 / 18%);
+}
+
+.sidebarItemActive .sidebarIcon {
+  background: linear-gradient(160deg, #3d5f8f 0%, #2b4365 100%);
 }
 
 .sidebarIcon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: #4b5f7d;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #4b6d9f 0%, #344f76 100%);
   color: #ffffff;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 16%);
+}
+
+.sidebarIcon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.sidebarIcon svg rect,
+.sidebarIcon svg circle {
+  fill: none;
+}
+
+.sidebarItemLabel {
+  max-width: 100%;
+  color: #263755;
+  font-size: 10px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.sidebarItemActive .sidebarItemLabel {
+  color: #1a2a45;
+}
+
+.toolPanelColumn {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #d4d4d4;
+  background: #f8f9fb;
+}
+
+.panelHeaderTitle {
+  color: #1d2a40;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.toolPanel {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 12px;
+  border-right: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editorColumn {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 8px;
+  background: #ffffff;
+}
+
+.previewHeaderLeft,
+.previewHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.previewHeaderRight {
+  justify-content: flex-end;
+}
+
+.previewHeaderGhostButton {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 7px;
+  border: 1px solid #d5deeb;
+  border-radius: 6px;
+  background: #f9fbff;
+  color: #4a5f83;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.previewHeaderModeButton {
+  height: 24px;
+  min-width: 64px;
+  padding: 0 10px;
+  border: 1px solid #d5deeb;
+  border-radius: 6px;
+  background: #f4f8ff;
+  color: #314d78;
+  font-size: 11px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  letter-spacing: 0.02em;
+  gap: 6px;
+  cursor: pointer;
 }
 
-.sidebarLabel {
-  max-width: 100%;
-  font-size: 9px;
-  line-height: 1.05;
-  text-align: center;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+.previewHeaderModeDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #3f78db;
+}
+
+.previewHeaderPrimaryAction {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid #d5deeb;
+  border-radius: 6px;
+  background: #f4f8ff;
+  color: #223b64;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .editorContent {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   overflow: hidden;
-}
-
-.toolPanel {
-  width: 300px;
-  min-width: 300px;
-  max-width: 300px;
-  height: 100vh;
-  min-height: 100vh;
-  padding: 14px 12px;
-  border-right: 1px solid #d4d4d4;
-  background: #f8f9fb;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .toolPanelTitle {
@@ -129,37 +292,247 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow: auto;
+  padding-right: 2px;
 }
 
-.chatMessage,
-.chatMessageAssistant {
+.chatRowUser,
+.chatRowAssistant {
+  display: flex;
+}
+
+.chatRowUser {
+  justify-content: flex-end;
+}
+
+.chatRowAssistant {
+  justify-content: flex-start;
+}
+
+.chatBubbleUser,
+.chatBubbleAssistant {
+  max-width: min(92%, 360px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chatBubbleUser {
+  border-bottom-right-radius: 4px;
+  background: linear-gradient(180deg, #2f80ff 0%, #2a69d8 100%);
+  color: #ffffff;
+}
+
+.chatBubbleAssistant {
+  border: 1px solid #d6deed;
+  border-bottom-left-radius: 4px;
+  background: #ffffff;
+  color: #1f2a3d;
+}
+
+.chatPlainText {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.chatMarkdown > *:first-child {
+  margin-top: 0;
+}
+
+.chatMarkdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.chatParagraph {
+  margin: 0 0 8px;
+}
+
+.chatHeading1,
+.chatHeading2,
+.chatHeading3 {
+  margin: 0 0 8px;
+  font-weight: 700;
+  color: #162945;
+}
+
+.chatHeading1 {
+  font-size: 16px;
+}
+
+.chatHeading2 {
+  font-size: 15px;
+}
+
+.chatHeading3 {
+  font-size: 14px;
+}
+
+.chatList {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.chatBlockquote {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid #8db6f6;
+  background: #eef5ff;
+  color: #274163;
+}
+
+.chatCodeBlock {
+  margin: 0 0 8px;
   padding: 10px;
   border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.35;
+  background: #111827;
+  color: #e5e7eb;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
 }
 
-.chatMessage {
-  background: #e9edf5;
-  color: #1b2a40;
+.chatInlineCode {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #edf2fb;
+  color: #12284a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
 }
 
-.chatMessageAssistant {
-  background: #d9ebff;
-  color: #113153;
+.chatLink {
+  color: #2f6fdf;
+  text-decoration: underline;
+}
+
+.chatThinkingBubble {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.chatThinkingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chatThinkingDots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #7b8da8;
+  animation: chatDotPulse 1.2s infinite ease-in-out;
+}
+
+.chatThinkingDots span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.chatThinkingDots span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes chatDotPulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.45;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.chatInputWrap {
+  position: relative;
+}
+
+.chatComposer {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .chatInput {
   width: 100%;
-  min-height: 70px;
-  resize: vertical;
-  padding: 10px;
+  min-height: 86px;
+  resize: none;
+  padding: 12px 44px 12px 12px;
   border: 1px solid #c8d2e0;
-  border-radius: 8px;
+  border-radius: 10px;
+  background: #ffffff;
   font: inherit;
   font-size: 13px;
+}
+
+.chatInput:focus {
+  outline: none;
+  border-color: #c8d2e0;
+  box-shadow: none;
+}
+
+.chatSendInline {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: #2f80ff;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.chatSendInline:hover:not(:disabled) {
+  background: #266dd9;
+  transform: translateY(-1px);
+}
+
+.chatSendInline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chatSendInline svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.toolPanelResizeHandle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 4;
+}
+
+.toolPanelResizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 52px;
+  border-radius: 999px;
+  background: #c1cede;
 }
 
 .primaryAction {
@@ -169,7 +542,7 @@
   background: #2f80ff;
   color: #ffffff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -185,7 +558,7 @@
   background: #ffffff;
   color: #1f2a3d;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -262,7 +635,7 @@
 
 .assetName {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: #1f2a3d;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -436,6 +809,8 @@
   font-size: 12px;
   line-height: 1.35;
 }
+
+
 
 
 

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Nunito } from "next/font/google";
+import { Geist_Mono, Rubik } from "next/font/google";
 import "./globals.css";
 
-const uiSans = Nunito({
-  variable: "--font-ui-sans",
+const uiSans = Rubik({
   subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["500", "600", "700", "800"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -25,9 +25,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${uiSans.variable} ${geistMono.variable}`}>
+      <body className={`${uiSans.className} ${geistMono.variable}`}>
         {children}
       </body>
     </html>
   );
 }
+

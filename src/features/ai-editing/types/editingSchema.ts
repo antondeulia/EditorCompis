@@ -1,4 +1,4 @@
-import { TimelineTrackType } from "@/features/timeline/types/timeline";
+﻿import { TimelineTrackType } from "@/features/timeline/types/timeline";
 
 export type EditingClipSource = "timeline" | "asset" | "element";
 
@@ -12,6 +12,16 @@ export interface EditingSchemaClip {
   previewY: number | null;
   previewWidth: number | null;
   previewHeight: number | null;
+  subtitleTextColor: string | null;
+  subtitleOutlineColor: string | null;
+  subtitleOutlineWidth: number | null;
+  subtitleBackgroundColor: string | null;
+  subtitleBackgroundOpacity: number | null;
+  subtitleFontWeight: number | null;
+  subtitleFontSizePx: number | null;
+  subtitleBorderRadiusPx: number | null;
+  subtitlePaddingXPx: number | null;
+  subtitlePaddingYPx: number | null;
 }
 
 export interface EditingSchemaTrack {
@@ -94,9 +104,24 @@ export const isEditingSchema = (value: unknown): value is EditingSchema => {
         clip.previewY,
         clip.previewWidth,
         clip.previewHeight,
+        clip.subtitleOutlineWidth,
+        clip.subtitleBackgroundOpacity,
+        clip.subtitleFontWeight,
+        clip.subtitleFontSizePx,
+        clip.subtitleBorderRadiusPx,
+        clip.subtitlePaddingXPx,
+        clip.subtitlePaddingYPx,
       ];
 
-      return maybeNumbers.every((candidate) => candidate === null || isFiniteNumber(candidate));
+      if (!maybeNumbers.every((candidate) => candidate === null || isFiniteNumber(candidate))) {
+        return false;
+      }
+
+      return (
+        (clip.subtitleTextColor === null || typeof clip.subtitleTextColor === "string") &&
+        (clip.subtitleOutlineColor === null || typeof clip.subtitleOutlineColor === "string") &&
+        (clip.subtitleBackgroundColor === null || typeof clip.subtitleBackgroundColor === "string")
+      );
     });
   });
 };
@@ -135,6 +160,16 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
                 "previewY",
                 "previewWidth",
                 "previewHeight",
+                "subtitleTextColor",
+                "subtitleOutlineColor",
+                "subtitleOutlineWidth",
+                "subtitleBackgroundColor",
+                "subtitleBackgroundOpacity",
+                "subtitleFontWeight",
+                "subtitleFontSizePx",
+                "subtitleBorderRadiusPx",
+                "subtitlePaddingXPx",
+                "subtitlePaddingYPx",
               ],
               properties: {
                 name: { type: "string", minLength: 1 },
@@ -156,6 +191,36 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
                 previewHeight: {
                   anyOf: [{ type: "number", minimum: 0.08, maximum: 1 }, { type: "null" }],
                 },
+                subtitleTextColor: {
+                  anyOf: [{ type: "string" }, { type: "null" }],
+                },
+                subtitleOutlineColor: {
+                  anyOf: [{ type: "string" }, { type: "null" }],
+                },
+                subtitleOutlineWidth: {
+                  anyOf: [{ type: "number", minimum: 0, maximum: 12 }, { type: "null" }],
+                },
+                subtitleBackgroundColor: {
+                  anyOf: [{ type: "string" }, { type: "null" }],
+                },
+                subtitleBackgroundOpacity: {
+                  anyOf: [{ type: "number", minimum: 0, maximum: 1 }, { type: "null" }],
+                },
+                subtitleFontWeight: {
+                  anyOf: [{ type: "number", minimum: 100, maximum: 900 }, { type: "null" }],
+                },
+                subtitleFontSizePx: {
+                  anyOf: [{ type: "number", minimum: 10, maximum: 96 }, { type: "null" }],
+                },
+                subtitleBorderRadiusPx: {
+                  anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }],
+                },
+                subtitlePaddingXPx: {
+                  anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }],
+                },
+                subtitlePaddingYPx: {
+                  anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }],
+                },
               },
             },
           },
@@ -164,3 +229,4 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
     },
   },
 };
+

@@ -1,4 +1,4 @@
-﻿import styles from "./TimelinePanel.module.css";
+import styles from "./TimelinePanel.module.css";
 
 interface TimelineToolbarProps {
   durationFrames: number;
@@ -10,12 +10,10 @@ interface TimelineToolbarProps {
 }
 
 const formatToolbarTime = (milliseconds: number): string => {
-  const totalSeconds = milliseconds / 1000;
+  const totalSeconds = Math.floor(milliseconds / 1000);
   const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  const ms = Math.floor(milliseconds % 1000);
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
 export const TimelineToolbar = ({
@@ -88,6 +86,7 @@ export const TimelineToolbar = ({
     </header>
   );
 };
+
 
 
 

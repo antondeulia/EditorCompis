@@ -1,6 +1,9 @@
 :root {
   --background: #ffffff;
   --foreground: #111111;
+  --font-weight-regular: 600;
+  --font-weight-medium: 700;
+  --font-weight-strong: 700;
 }
 
 html,
@@ -14,9 +17,18 @@ body {
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: var(--font-ui-sans), "Nunito", "Segoe UI", sans-serif;
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 * {
@@ -33,3 +45,4 @@ a {
 html {
   color-scheme: light;
 }
+

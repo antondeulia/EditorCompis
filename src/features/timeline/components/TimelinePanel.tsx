@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   DragEvent as ReactDragEvent,
@@ -1211,6 +1211,9 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     </section>
   );
 };
+
+
+
 
 
 
