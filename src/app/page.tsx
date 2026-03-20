@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import { ChangeEvent, DragEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, Fragment, KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 import { applyEditingSchemaToTimeline } from "@/features/ai-editing/services/applyEditingSchemaToTimeline";
@@ -373,7 +373,7 @@ const TOOL_PANEL_MIN_WIDTH = 320;
 const STREAMING_STEP_MS = 20;
 const STREAMING_CHUNK_SIZE = 3;
 
-const markdownSpecialLinePatterns = [/^#{1,3}\s+/, /^>\s+/, /^[-*—]\s+/, /^\d+\.\s+/, /^```/];
+const markdownSpecialLinePatterns = [/^#{1,3}\s+/, /^>\s+/, /^[-*\u2022]\s+/, /^\d+[.)]\s+/, /^```/];
 
 const isMarkdownSpecialLine = (line: string) => markdownSpecialLinePatterns.some((pattern) => pattern.test(line));
 
@@ -485,10 +485,10 @@ const renderMarkdownMessage = (text: string) => {
       continue;
     }
 
-    if (/^[-*—]\s+/.test(line)) {
+    if (/^[-*\u2022]\s+/.test(line)) {
       const listLines: string[] = [];
-      while (lineIndex < lines.length && /^[-*—]\s+/.test(lines[lineIndex])) {
-        listLines.push(lines[lineIndex].replace(/^[-*—]\s+/, ""));
+      while (lineIndex < lines.length && /^[-*\u2022]\s+/.test(lines[lineIndex])) {
+        listLines.push(lines[lineIndex].replace(/^[-*\u2022]\s+/, ""));
         lineIndex += 1;
       }
       blocks.push(
@@ -501,10 +501,10 @@ const renderMarkdownMessage = (text: string) => {
       continue;
     }
 
-    if (/^\d+\.\s+/.test(line)) {
+    if (/^\d+[.)]\s+/.test(line)) {
       const orderedListLines: string[] = [];
-      while (lineIndex < lines.length && /^\d+\.\s+/.test(lines[lineIndex])) {
-        orderedListLines.push(lines[lineIndex].replace(/^\d+\.\s+/, ""));
+      while (lineIndex < lines.length && /^\d+[.)]\s+/.test(lines[lineIndex])) {
+        orderedListLines.push(lines[lineIndex].replace(/^\d+[.)]\s+/, ""));
         lineIndex += 1;
       }
       blocks.push(
@@ -528,17 +528,20 @@ const renderMarkdownMessage = (text: string) => {
       lineIndex += 1;
     }
 
-    const paragraphText = paragraphLines.join(" ");
     blocks.push(
       <p key={`p-${lineIndex}`} className={styles.chatParagraph}>
-        {renderInlineMarkdown(paragraphText, `p-${lineIndex}`)}
+        {paragraphLines.map((paragraphLine, paragraphLineIndex) => (
+          <Fragment key={`p-${lineIndex}-${paragraphLineIndex}`}>
+            {renderInlineMarkdown(paragraphLine, `p-${lineIndex}-${paragraphLineIndex}`)}
+            {paragraphLineIndex < paragraphLines.length - 1 ? <br /> : null}
+          </Fragment>
+        ))}
       </p>,
     );
   }
 
   return blocks;
 };
-
 const buildAiAssetContext = (assets: AssetItem[]): AiEditAssetContext[] =>
   assets.map((asset) => {
     const inferredType = inferMediaTypeFromAsset(asset.file);
@@ -1409,6 +1412,9 @@ export default function Home() {
     window.addEventListener("pointerup", handlePointerUp);
   };
 
+  const hasTimelineChanged = (before: TimelineSequence, after: TimelineSequence): boolean =>
+    JSON.stringify(before) !== JSON.stringify(after);
+
   const handleAiEditSubmit = async () => {
     const trimmedMessage = aiMessageDraft.trim();
     if (!trimmedMessage) {
@@ -1491,10 +1497,17 @@ export default function Home() {
           currentSequenceRef.current,
           subtitlePreferences,
         );
+        const previousSequence = currentSequenceRef.current;
         const nextSequence = applyEditingSchemaToTimeline(
-          currentSequenceRef.current,
+          previousSequence,
           directSubtitleSchema,
         );
+
+        if (!hasTimelineChanged(previousSequence, nextSequence)) {
+          await streamAssistantText("Не получилось применить изменения на дорожку. Уточните, что именно добавить или изменить.");
+          setAiStatus("Subtitle schema produced no timeline changes.");
+          return;
+        }
 
         setTimelineSequence(nextSequence);
         currentSequenceRef.current = nextSequence;
@@ -1625,10 +1638,19 @@ export default function Home() {
         return;
       }
 
-      const nextSequence = applyEditingSchemaToTimeline(
-        currentSequenceRef.current,
-        editingSchema,
-      );
+      const previousSequence = currentSequenceRef.current;
+      const nextSequence = applyEditingSchemaToTimeline(previousSequence, editingSchema);
+
+      if (!hasTimelineChanged(previousSequence, nextSequence)) {
+        patchAssistantMessage((previousText) => {
+          const fallbackText = "Не внес изменения на дорожку. Уточните задачу или добавьте нужные ассеты.";
+          return previousText.trim().length > 0
+            ? `${previousText}\n\n${fallbackText}`
+            : fallbackText;
+        });
+        setAiStatus("AI schema produced no timeline changes.");
+        return;
+      }
 
       setTimelineSequence(nextSequence);
       currentSequenceRef.current = nextSequence;
@@ -1694,7 +1716,20 @@ export default function Home() {
     if (activeItem.id === "ai-edit") {
       return (
         <>
+          {showAiThinking ? <p className={styles.chatThinkingStatus}>Thinking...</p> : null}
           <div className={styles.chatThread}>
+            {aiMessages.length === 0 && !showAiThinking ? (
+              <div className={styles.chatEmptyState}>
+                <div className={styles.chatEmptyLogo} aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M5 12h14" />
+                    <path d="M12 5v14" />
+                    <path d="M7.2 7.2l9.6 9.6" />
+                    <path d="M16.8 7.2l-9.6 9.6" />
+                  </svg>
+                </div>
+              </div>
+            ) : null}
             {aiMessages.map((message) => (
               <div
                 key={message.id}
@@ -1709,17 +1744,6 @@ export default function Home() {
                 </article>
               </div>
             ))}
-            {showAiThinking ? (
-              <div className={styles.chatRowAssistant}>
-                <article className={`${styles.chatBubbleAssistant} ${styles.chatThinkingBubble}`}>
-                  <div className={styles.chatThinkingDots} aria-label="AI is thinking">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                </article>
-              </div>
-            ) : null}
             <div ref={chatThreadEndRef} />
           </div>
           <div className={styles.chatComposer}>

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Rubik } from "next/font/google";
+import { Archivo_Black, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const uiSans = Rubik({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600", "700", "800"],
+const uiSans = Archivo_Black({
+  subsets: ["latin"],
+  weight: "400",
   display: "swap",
 });
 
@@ -31,4 +31,3 @@ export default function RootLayout({
     </html>
   );
 }
-
