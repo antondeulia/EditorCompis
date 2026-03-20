@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 import {
   AiEditorAssetContext,
@@ -11,6 +11,10 @@ import {
   EDITING_SCHEMA_JSON_SCHEMA,
   isEditingSchema,
 } from "@/features/ai-editing/types/editingSchema";
+import {
+  ensureNonEmptyEditingSchemaForIntent,
+  normalizeEditingSchema,
+} from "@/features/ai-editing/services/normalizeEditingSchema";
 import { TimelineSequence } from "@/features/timeline/types/timeline";
 
 interface AiEditRequestBody {
@@ -429,16 +433,29 @@ export async function POST(request: Request) {
             return;
           }
 
-          if (parsedSchema.assistantMessage.length > streamedAssistantChars) {
+          const normalizedSchema = normalizeEditingSchema({
+            schema: parsedSchema,
+            currentSequence,
+            assets,
+            userMessage,
+          });
+
+          const ensuredSchema = ensureNonEmptyEditingSchemaForIntent({
+            schema: normalizedSchema,
+            currentSequence,
+            userMessage,
+          });
+
+          if (ensuredSchema.assistantMessage.length > streamedAssistantChars) {
             emit({
               type: "assistant_delta",
-              delta: parsedSchema.assistantMessage.slice(streamedAssistantChars),
+              delta: ensuredSchema.assistantMessage.slice(streamedAssistantChars),
             });
           }
 
           emit({
             type: "done",
-            editingSchema: parsedSchema,
+            editingSchema: ensuredSchema,
             usage: (completedResponsePayload as { usage?: unknown } | null)?.usage ?? null,
             model,
           });
@@ -458,3 +475,6 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
+

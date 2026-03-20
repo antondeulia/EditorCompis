@@ -146,8 +146,12 @@ const collectActivePreviewClips = (tracks: TimelineTrack[], frame: number): Acti
   return activeClips;
 };
 
-const getElementVariant = (name: string): "text" | "circle" | "triangle" | "line" | "shape" => {
+const getElementVariant = (name: string): "text" | "background" | "circle" | "triangle" | "line" | "shape" => {
   const loweredName = name.toLowerCase();
+
+  if (loweredName.includes("background") || loweredName.includes("backdrop")) {
+    return "background";
+  }
 
   if (TEXT_LABEL_PATTERN.test(loweredName)) {
     return "text";
@@ -491,6 +495,10 @@ export const TimelinePreview = ({
       return <span className={styles.previewElementText}>{getTextLabel(clip.name)}</span>;
     }
 
+    if (variant === "background") {
+      return <div className={styles.previewElementBackground} aria-hidden="true" />;
+    }
+
     if (variant === "circle") {
       return <div className={styles.previewElementCircle} aria-hidden="true" />;
     }
@@ -611,5 +619,8 @@ export const TimelinePreview = ({
     </section>
   );
 };
+
+
+
 
 
