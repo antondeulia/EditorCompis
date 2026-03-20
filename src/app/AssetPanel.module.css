@@ -1,0 +1,121 @@
+.primaryAction {
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f80ff;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.dropzone {
+  border: 2px dashed #bdcadf;
+  border-radius: 10px;
+  min-height: 86px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  color: #41516b;
+  background: #f2f6fd;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.dropzoneActive {
+  border-color: #2f80ff;
+  background: #e7f1ff;
+}
+
+.assetList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.assetCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid #ced7e5;
+  border-radius: 8px;
+  background: #ffffff;
+  min-height: 62px;
+}
+
+.assetCardDraggable {
+  cursor: grab;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.assetCardDraggable:hover {
+  border-color: #9fb3d4;
+  box-shadow: 0 4px 12px rgb(22 43 72 / 12%);
+}
+
+.assetCardDraggable:active {
+  cursor: grabbing;
+}
+
+.assetPreview {
+  width: 68px;
+  height: 46px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #0f131b;
+}
+
+.assetPreviewPlaceholder {
+  width: 68px;
+  height: 46px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d9e1ef;
+  color: #425371;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.assetMeta {
+  min-width: 0;
+}
+
+.assetName {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2a3d;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.assetInfo {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #51617c;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.assetEmpty {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed #c6d2e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #41516b;
+  font-size: 13px;
+  line-height: 1.35;
+}

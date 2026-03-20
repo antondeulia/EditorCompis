@@ -1,0 +1,149 @@
+.chatThread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.chatThinkingStatus {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.chatEmptyState {
+  flex: 1;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chatEmptyLogo {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chatEmptyLogo svg {
+  width: 36px;
+  height: 36px;
+  stroke: #5a6f93;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.chatRowUser,
+.chatRowAssistant {
+  display: flex;
+}
+
+.chatRowUser {
+  justify-content: flex-end;
+}
+
+.chatRowAssistant {
+  justify-content: flex-start;
+}
+
+.chatBubbleUser,
+.chatBubbleAssistant {
+  max-width: min(92%, 360px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chatBubbleUser {
+  border-bottom-right-radius: 4px;
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.chatBubbleAssistant {
+  max-width: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: #1f2a3d;
+}
+
+.chatPlainText {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.chatComposer {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatInputWrap {
+  position: relative;
+}
+
+.chatInput {
+  width: 100%;
+  min-height: 86px;
+  resize: none;
+  padding: 12px 44px 12px 12px;
+  border: 1px solid #c8d2e0;
+  border-radius: 10px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.chatInput:focus {
+  outline: none;
+  border-color: #c8d2e0;
+  box-shadow: none;
+}
+
+.chatSendInline {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: #2f80ff;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.chatSendInline:hover:not(:disabled) {
+  background: #266dd9;
+  transform: translateY(-1px);
+}
+
+.chatSendInline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chatSendInline svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}

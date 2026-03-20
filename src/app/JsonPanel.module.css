@@ -1,0 +1,57 @@
+.primaryAction {
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f80ff;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondaryAction {
+  height: 36px;
+  border: 1px solid #c2cfdf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2a3d;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondaryAction:hover {
+  background: #f4f7fc;
+}
+
+.jsonActionRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.jsonEditor {
+  width: 100%;
+  flex: 1;
+  min-height: 260px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #c8d2e0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2a3d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.jsonStatus {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #e7f1ff;
+  color: #123a6b;
+  font-size: 12px;
+  line-height: 1.35;
+}

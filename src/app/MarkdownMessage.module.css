@@ -1,0 +1,69 @@
+.message > *:first-child {
+  margin-top: 0;
+}
+
+.message > *:last-child {
+  margin-bottom: 0;
+}
+
+.paragraph {
+  margin: 0 0 8px;
+}
+
+.heading1,
+.heading2,
+.heading3 {
+  margin: 0 0 8px;
+  font-weight: 700;
+  color: #162945;
+}
+
+.heading1 {
+  font-size: 16px;
+}
+
+.heading2 {
+  font-size: 15px;
+}
+
+.heading3 {
+  font-size: 14px;
+}
+
+.list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.blockquote {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid #8db6f6;
+  background: #eef5ff;
+  color: #274163;
+}
+
+.codeBlock {
+  margin: 0 0 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #111827;
+  color: #e5e7eb;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.inlineCode {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #edf2fb;
+  color: #12284a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.link {
+  color: #2f6fdf;
+  text-decoration: underline;
+}
