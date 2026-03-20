@@ -1,8 +1,8 @@
-import { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
+﻿import { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 
 import { TimelineClip, TimelineTrack } from "@/features/timeline/types/timeline";
 
-import { TimelineDragState, TimelineExternalPreview } from "./TimelinePanel";
+import { TimelineDragState, TimelineExternalPreview } from "./timelineSharedTypes";
 import { TimelineClipBlock } from "./TimelineClipBlock";
 import styles from "./TimelinePanel.module.css";
 
@@ -11,7 +11,7 @@ interface TimelineTrackRowProps {
   trackIndex: number;
   dragState: TimelineDragState | null;
   framePixelRatio: number;
-  selectedClipIds: string[];
+  selectedClipIdSet: ReadonlySet<string>;
   isDropTarget: boolean;
   externalPreview: TimelineExternalPreview | null;
   onTrackDragOver: (event: ReactDragEvent<HTMLDivElement>, trackIndex: number) => void;
@@ -21,19 +21,16 @@ interface TimelineTrackRowProps {
   onClipPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     clip: TimelineClip,
-    trackId: string,
     trackIndex: number,
   ) => void;
   onResizeLeftPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     clip: TimelineClip,
-    trackId: string,
     trackIndex: number,
   ) => void;
   onResizeRightPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     clip: TimelineClip,
-    trackId: string,
     trackIndex: number,
   ) => void;
 }
@@ -43,7 +40,7 @@ export const TimelineTrackRow = ({
   trackIndex,
   dragState,
   framePixelRatio,
-  selectedClipIds,
+  selectedClipIdSet,
   isDropTarget,
   externalPreview,
   onTrackDragOver,
@@ -88,16 +85,12 @@ export const TimelineTrackRow = ({
               widthPx={widthPx}
               trackType={track.type}
               isInteracting={isInteracting}
-              isSelected={selectedClipIds.includes(clip.id)}
+              isSelected={selectedClipIdSet.has(clip.id)}
               interactionMode={activeDragState?.mode}
               dragOffsetYPx={dragOffsetYPx}
-              onPointerDown={(event) => onClipPointerDown(event, clip, track.id, trackIndex)}
-              onResizeLeftPointerDown={(event) =>
-                onResizeLeftPointerDown(event, clip, track.id, trackIndex)
-              }
-              onResizeRightPointerDown={(event) =>
-                onResizeRightPointerDown(event, clip, track.id, trackIndex)
-              }
+              onPointerDown={(event) => onClipPointerDown(event, clip, trackIndex)}
+              onResizeLeftPointerDown={(event) => onResizeLeftPointerDown(event, clip, trackIndex)}
+              onResizeRightPointerDown={(event) => onResizeRightPointerDown(event, clip, trackIndex)}
             />
           );
         })}
@@ -123,4 +116,3 @@ export const TimelineTrackRow = ({
     </div>
   );
 };
-

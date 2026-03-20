@@ -577,7 +577,7 @@
   width: 100%;
   height: 100%;
   border-radius: 10px;
-  background: linear-gradient(180deg, #f5a338 0%, #f28524 100%);
+  background: #f28524;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
 }
 
@@ -592,7 +592,7 @@
   width: min(100%, 84%);
   height: min(100%, 84%);
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #8dd4ff 0%, #2f80ff 62%, #1954a8 100%);
+  background: #2f80ff;
   box-shadow: 0 0 0 1px rgb(255 255 255 / 34%) inset;
 }
 
@@ -608,7 +608,7 @@
   width: 100%;
   height: clamp(4px, 18%, 14px);
   border-radius: 999px;
-  background: linear-gradient(90deg, #ffe082 0%, #ffc107 100%);
+  background: #ffc107;
 }
 
 .previewOverlayResizeHandle {
@@ -685,7 +685,7 @@
   letter-spacing: 0.01em;
   text-align: center;
   text-shadow: 0 2px 8px rgb(0 0 0 / 75%);
-  background: linear-gradient(180deg, rgb(8 8 8 / 0%) 0%, rgb(8 8 8 / 44%) 48%, rgb(8 8 8 / 76%) 100%);
+  background: rgb(8 8 8 / 48%);
   padding: 10px 12px 14px;
 }
 

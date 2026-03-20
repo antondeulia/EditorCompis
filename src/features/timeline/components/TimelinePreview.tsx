@@ -14,6 +14,10 @@ import {
   clearCurrentTimelineDragItem,
   parseTimelineDragItemFromDataTransfer,
 } from "@/features/timeline/lib/dragTransfer";
+import {
+  getPreviewElementVariant,
+  getPreviewTextLabel,
+} from "@/features/timeline/lib/previewLayout";
 import { TimelineClip, TimelineTrack } from "@/features/timeline/types/timeline";
 
 import styles from "./TimelinePanel.module.css";
@@ -62,7 +66,6 @@ interface PreviewInteractionState {
 
 const RESIZE_HANDLES: ResizeHandle[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 
-const TEXT_LABEL_PATTERN = /(title|subtitle|header|text|quote|description|body|h1|h2|h3)/i;
 
 const clamp = (value: number, min: number, max: number) => {
   if (value < min) {
@@ -145,34 +148,6 @@ const collectActivePreviewClips = (tracks: TimelineTrack[], frame: number): Acti
 
   return activeClips;
 };
-
-const getElementVariant = (name: string): "text" | "background" | "circle" | "triangle" | "line" | "shape" => {
-  const loweredName = name.toLowerCase();
-
-  if (loweredName.includes("background") || loweredName.includes("backdrop")) {
-    return "background";
-  }
-
-  if (TEXT_LABEL_PATTERN.test(loweredName)) {
-    return "text";
-  }
-
-  if (loweredName.includes("circle")) {
-    return "circle";
-  }
-
-  if (loweredName.includes("triangle")) {
-    return "triangle";
-  }
-
-  if (loweredName.includes("line")) {
-    return "line";
-  }
-
-  return "shape";
-};
-
-const getTextLabel = (name: string) => name.replace(/\s*\(h\d\)/i, "").trim();
 
 const isFullFrameLayout = (layout: PreviewLayout) => {
   return (
@@ -485,35 +460,116 @@ export const TimelinePreview = ({
       return null;
     }
 
+    const displayText = clip.content?.displayText?.trim() || "";
+    const variant = getPreviewElementVariant(clip);
+    const style = clip.elementStyle;
+    const textStyle = {
+      color: style?.textColor,
+      textAlign: style?.textAlign,
+      backgroundColor: style?.backgroundColor,
+      borderRadius: typeof style?.borderRadiusPx === "number" ? `${style.borderRadiusPx}px` : undefined,
+      padding:
+        style?.backgroundColor || typeof style?.borderRadiusPx === "number"
+          ? "0.2em 0.4em"
+          : undefined,
+    };
+
     if (trackType === "subtitle") {
-      return <span className={styles.previewSubtitleText}>{getTextLabel(clip.name)}</span>;
+      return (
+        <span className={styles.previewSubtitleText} style={textStyle}>
+          {getPreviewTextLabel(clip)}
+        </span>
+      );
     }
 
-    const variant = getElementVariant(clip.name);
-
-    if (variant === "text") {
-      return <span className={styles.previewElementText}>{getTextLabel(clip.name)}</span>;
+    if (displayText || variant === "text") {
+      return (
+        <span className={styles.previewElementText} style={textStyle}>
+          {displayText || getPreviewTextLabel(clip)}
+        </span>
+      );
     }
 
     if (variant === "background") {
-      return <div className={styles.previewElementBackground} aria-hidden="true" />;
+      return (
+        <div
+          className={styles.previewElementBackground}
+          aria-hidden="true"
+          style={{
+            background: style?.backgroundColor ?? style?.fillColor ?? undefined,
+            opacity:
+              typeof style?.backgroundOpacity === "number"
+                ? clamp(style.backgroundOpacity, 0, 1)
+                : undefined,
+          }}
+        />
+      );
     }
 
     if (variant === "circle") {
-      return <div className={styles.previewElementCircle} aria-hidden="true" />;
+      return (
+        <div
+          className={styles.previewElementCircle}
+          aria-hidden="true"
+          style={{ background: style?.fillColor ?? undefined }}
+        />
+      );
     }
 
     if (variant === "triangle") {
-      return <div className={styles.previewElementTriangle} aria-hidden="true" />;
+      return (
+        <div
+          className={styles.previewElementTriangle}
+          aria-hidden="true"
+          style={{ background: style?.fillColor ?? undefined }}
+        />
+      );
     }
 
     if (variant === "line") {
-      return <div className={styles.previewElementLine} aria-hidden="true" />;
+      return (
+        <div
+          className={styles.previewElementLine}
+          aria-hidden="true"
+          style={{ background: style?.backgroundColor ?? style?.fillColor ?? undefined }}
+        />
+      );
     }
 
-    return <div className={styles.previewElementShape} aria-hidden="true" />;
+    return (
+      <div
+        className={styles.previewElementContent}
+        style={{
+          justifyContent:
+            style?.textAlign === "left"
+              ? "flex-start"
+              : style?.textAlign === "right"
+                ? "flex-end"
+                : "center",
+          textAlign: style?.textAlign ?? "center",
+        }}
+      >
+        <div
+          className={styles.previewElementShape}
+          aria-hidden="true"
+          style={{
+            background: style?.backgroundColor ?? style?.fillColor ?? undefined,
+            opacity:
+              typeof style?.backgroundOpacity === "number"
+                ? clamp(style.backgroundOpacity, 0, 1)
+                : undefined,
+            borderRadius:
+              typeof style?.borderRadiusPx === "number" ? `${style.borderRadiusPx}px` : undefined,
+          }}
+        />
+        {displayText ? (
+          <span className={styles.previewElementText} style={textStyle}>
+            {displayText}
+          </span>
+        ) : null}
+      </div>
+    );
   }, []);
-
   const getRenderedLayout = useCallback(
     (clip: TimelineClip, baseLayout: PreviewLayout): PreviewLayout => {
       if (!clip.mediaUrl || !activeVideo || clip.id !== activeVideo.clip.id || !activeVideoAspect) {

@@ -1,13 +1,32 @@
-import { SidebarItemDefinition, SidebarLibrarySection } from "./editor-types";
+﻿import { SidebarItemDefinition, SidebarLibraryItem, SidebarLibrarySection } from "./editor-types";
 
 const FRAME_RATE = 30;
+
+const createLibraryItem = (
+  id: string,
+  icon: string,
+  title: string,
+  description: string,
+  seconds: number,
+): SidebarLibraryItem => ({
+  id,
+  icon,
+  title,
+  description,
+  dragItem: {
+    label: title,
+    mediaType: "video",
+    durationFrames: FRAME_RATE * seconds,
+    source: "element",
+  },
+});
 
 export const DEFAULT_CLIP_DURATION_FRAMES = FRAME_RATE * 8;
 export const TOOL_PANEL_MIN_WIDTH = 320;
 export const STREAMING_STEP_MS = 20;
 export const STREAMING_CHUNK_SIZE = 3;
 export const SUBTITLE_REQUEST_PATTERN =
-  /(subtitle|subtitles|caption|captions|субтитр|титр)/i;
+  /(subtitle|subtitles|caption|captions|subtitles? track|субтитр|субтитры|титр|титры)/i;
 
 export const SIDEBAR_ITEMS: SidebarItemDefinition[] = [
   { id: "assets", label: "Assets" },
@@ -18,87 +37,91 @@ export const SIDEBAR_ITEMS: SidebarItemDefinition[] = [
   { id: "json", label: "JSON" },
 ];
 
+export const SIDEBAR_ITEM_BY_ID = new Map(
+  SIDEBAR_ITEMS.map((item) => [item.id, item] as const),
+);
+
 export const ELEMENT_LIBRARY_SECTIONS: SidebarLibrarySection[] = [
   {
     id: "shapes",
     title: "Shapes",
     items: [
-      {
-        id: "shape-rect",
-        icon: "[]",
-        title: "Solid Rectangle",
-        description: "Clean block for plates, masks, and visual accents.",
-        dragItem: { label: "Solid Rectangle", mediaType: "video", durationFrames: FRAME_RATE * 6, source: "element" },
-      },
-      {
-        id: "shape-circle",
-        icon: "()",
-        title: "Circle Pulse",
-        description: "Round accent for focus highlights.",
-        dragItem: { label: "Circle Pulse", mediaType: "video", durationFrames: FRAME_RATE * 5, source: "element" },
-      },
-      {
-        id: "shape-triangle",
-        icon: "/\\",
-        title: "Triangle Marker",
-        description: "Directional marker for infographics and pointers.",
-        dragItem: { label: "Triangle Marker", mediaType: "video", durationFrames: FRAME_RATE * 5, source: "element" },
-      },
-      {
-        id: "shape-line",
-        icon: "--",
-        title: "Line Accent",
-        description: "Linear divider for titles and cards.",
-        dragItem: { label: "Line Accent", mediaType: "video", durationFrames: FRAME_RATE * 4, source: "element" },
-      },
+      createLibraryItem(
+        "shape-rect",
+        "[]",
+        "Solid Rectangle",
+        "Clean block for plates, masks, and visual accents.",
+        6,
+      ),
+      createLibraryItem(
+        "shape-circle",
+        "()",
+        "Circle Pulse",
+        "Round accent for focus highlights.",
+        5,
+      ),
+      createLibraryItem(
+        "shape-triangle",
+        "/\\",
+        "Triangle Marker",
+        "Directional marker for infographics and pointers.",
+        5,
+      ),
+      createLibraryItem(
+        "shape-line",
+        "--",
+        "Line Accent",
+        "Linear divider for titles and cards.",
+        4,
+      ),
     ],
   },
   {
     id: "motion-pack",
     title: "Motion Elements",
     items: [
-      {
-        id: "element-lower-third",
-        icon: "LT",
-        title: "Lower Third Pro",
-        description: "Modern lower-third with room for name and role.",
-        dragItem: { label: "Lower Third Pro", mediaType: "video", durationFrames: FRAME_RATE * 6, source: "element" },
-      },
-      {
-        id: "element-callout",
-        icon: "!",
-        title: "Callout Bubble",
-        description: "Callout bubble for hints and UI demos.",
-        dragItem: { label: "Callout Bubble", mediaType: "video", durationFrames: FRAME_RATE * 5, source: "element" },
-      },
-      {
-        id: "element-progress",
-        icon: "==",
-        title: "Progress Bar",
-        description: "Timer/progress bar for storytelling.",
-        dragItem: { label: "Progress Bar", mediaType: "video", durationFrames: FRAME_RATE * 8, source: "element" },
-      },
-      {
-        id: "element-split",
-        icon: "||",
-        title: "Split Screen",
-        description: "Two-column composition for side-by-side comparison.",
-        dragItem: { label: "Split Screen", mediaType: "video", durationFrames: FRAME_RATE * 10, source: "element" },
-      },
-      {
-        id: "element-arrow",
-        icon: "->",
-        title: "Arrow Swipe",
-        description: "Dynamic arrow to direct viewer attention.",
-        dragItem: { label: "Arrow Swipe", mediaType: "video", durationFrames: FRAME_RATE * 4, source: "element" },
-      },
-      {
-        id: "element-burst",
-        icon: "**",
-        title: "Star Burst",
-        description: "Burst badge for promos, discounts, and CTA.",
-        dragItem: { label: "Star Burst", mediaType: "video", durationFrames: FRAME_RATE * 4, source: "element" },
-      },
+      createLibraryItem(
+        "element-lower-third",
+        "LT",
+        "Lower Third Pro",
+        "Modern lower-third with room for name and role.",
+        6,
+      ),
+      createLibraryItem(
+        "element-callout",
+        "!",
+        "Callout Bubble",
+        "Callout bubble for hints and UI demos.",
+        5,
+      ),
+      createLibraryItem(
+        "element-progress",
+        "==",
+        "Progress Bar",
+        "Timer/progress bar for storytelling.",
+        8,
+      ),
+      createLibraryItem(
+        "element-split",
+        "||",
+        "Split Screen",
+        "Two-column composition for side-by-side comparison.",
+        10,
+      ),
+      createLibraryItem(
+        "element-arrow",
+        "->",
+        "Arrow Swipe",
+        "Dynamic arrow to direct viewer attention.",
+        4,
+      ),
+      createLibraryItem(
+        "element-burst",
+        "**",
+        "Star Burst",
+        "Burst badge for promos, discounts, and CTA.",
+        4,
+      ),
     ],
   },
 ];
@@ -108,61 +131,61 @@ export const TEXT_LIBRARY_SECTIONS: SidebarLibrarySection[] = [
     id: "headings",
     title: "Headings",
     items: [
-      {
-        id: "text-h1",
-        icon: "H1",
-        title: "Hero Title (H1)",
-        description: "Primary large heading for the scene.",
-        dragItem: { label: "Hero Title (H1)", mediaType: "video", durationFrames: FRAME_RATE * 6, source: "element" },
-      },
-      {
-        id: "text-h2",
-        icon: "H2",
-        title: "Section Title (H2)",
-        description: "Section heading for a new topic.",
-        dragItem: { label: "Section Title (H2)", mediaType: "video", durationFrames: FRAME_RATE * 6, source: "element" },
-      },
-      {
-        id: "text-h3",
-        icon: "H3",
-        title: "Topic Header (H3)",
-        description: "Subheading for key points and bullets.",
-        dragItem: { label: "Topic Header (H3)", mediaType: "video", durationFrames: FRAME_RATE * 5, source: "element" },
-      },
+      createLibraryItem(
+        "text-h1",
+        "H1",
+        "Hero Title (H1)",
+        "Primary large heading for the scene.",
+        6,
+      ),
+      createLibraryItem(
+        "text-h2",
+        "H2",
+        "Section Title (H2)",
+        "Section heading for a new topic.",
+        6,
+      ),
+      createLibraryItem(
+        "text-h3",
+        "H3",
+        "Topic Header (H3)",
+        "Subheading for key points and bullets.",
+        5,
+      ),
     ],
   },
   {
     id: "captions",
     title: "Captions & Body",
     items: [
-      {
-        id: "text-subtitle",
-        icon: "CC",
-        title: "Subtitle",
-        description: "Subtitle in a lower safe area.",
-        dragItem: { label: "Subtitle", mediaType: "video", durationFrames: FRAME_RATE * 4, source: "element" },
-      },
-      {
-        id: "text-description",
-        icon: "DS",
-        title: "Description",
-        description: "Description or clarification under the heading.",
-        dragItem: { label: "Description", mediaType: "video", durationFrames: FRAME_RATE * 7, source: "element" },
-      },
-      {
-        id: "text-body",
-        icon: "Tx",
-        title: "Body Text",
-        description: "Main body text for cards and scenes.",
-        dragItem: { label: "Body Text", mediaType: "video", durationFrames: FRAME_RATE * 8, source: "element" },
-      },
-      {
-        id: "text-quote",
-        icon: "\"\"",
-        title: "Quote Block",
-        description: "Quote block with emphasized typography.",
-        dragItem: { label: "Quote Block", mediaType: "video", durationFrames: FRAME_RATE * 8, source: "element" },
-      },
+      createLibraryItem(
+        "text-subtitle",
+        "CC",
+        "Subtitle",
+        "Subtitle in a lower safe area.",
+        4,
+      ),
+      createLibraryItem(
+        "text-description",
+        "DS",
+        "Description",
+        "Description or clarification under the heading.",
+        7,
+      ),
+      createLibraryItem(
+        "text-body",
+        "Tx",
+        "Body Text",
+        "Main body text for cards and scenes.",
+        8,
+      ),
+      createLibraryItem(
+        "text-quote",
+        "\"\"",
+        "Quote Block",
+        "Quote block with emphasized typography.",
+        8,
+      ),
     ],
   },
 ];

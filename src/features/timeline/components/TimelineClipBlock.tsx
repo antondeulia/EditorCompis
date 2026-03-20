@@ -1,8 +1,8 @@
-import { PointerEvent } from "react";
+﻿import { PointerEvent } from "react";
 
-import { TimelineTrackType, TimelineClip } from "@/features/timeline/types/timeline";
+import { TimelineClip, TimelineTrackType } from "@/features/timeline/types/timeline";
 
-import { TimelineInteractionMode } from "./TimelinePanel";
+import { TimelineInteractionMode } from "./timelineSharedTypes";
 import styles from "./TimelinePanel.module.css";
 
 interface TimelineClipBlockProps {
@@ -41,7 +41,11 @@ export const TimelineClipBlock = ({
   onResizeRightPointerDown,
 }: TimelineClipBlockProps) => {
   const clipColorClass =
-    trackType === "video" ? styles.clipBlockVideo : trackType === "audio" ? styles.clipBlockAudio : styles.clipBlockSubtitle;
+    trackType === "video"
+      ? styles.clipBlockVideo
+      : trackType === "audio"
+        ? styles.clipBlockAudio
+        : styles.clipBlockSubtitle;
   const interactingClass = isInteracting ? styles.clipBlockDragging : "";
   const selectedClass = isSelected ? styles.clipBlockSelected : "";
   const ghostClass = isGhost ? styles.clipBlockGhost : "";

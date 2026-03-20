@@ -10,19 +10,26 @@ import {
   useState,
 } from "react";
 
+import { TIMELINE_LAYOUT } from "@/features/timeline/constants/timelineLayout";
 import {
   SidebarTimelineItem,
   clearCurrentTimelineDragItem,
   parseTimelineDragItemFromDataTransfer,
 } from "@/features/timeline/lib/dragTransfer";
-import { TIMELINE_LAYOUT } from "@/features/timeline/constants/timelineLayout";
 import {
-  TimelineClip,
-  TimelineSequence,
-  TimelineTrack,
-  TimelineTrackType,
-} from "@/features/timeline/types/timeline";
+  MIN_CLIP_DURATION_FRAMES,
+  collectSnapFrames,
+  createTimelineClipFromSidebarItem,
+  getBestSnap,
+  insertClipIntoTrack,
+  moveClipToTrack,
+} from "@/features/timeline/lib/clipPlacement";
+import { clamp } from "@/features/timeline/lib/clamp";
+import { useTimelinePlayback } from "@/features/timeline/hooks/useTimelinePlayback";
+import { useTimelineSelection } from "@/features/timeline/hooks/useTimelineSelection";
+import { TimelineClip, TimelineSequence, TimelineTrack } from "@/features/timeline/types/timeline";
 
+import { TimelineDragState, TimelineExternalPreview, TimelineInteractionMode } from "./timelineSharedTypes";
 import { TimelinePreview } from "./TimelinePreview";
 import { TimelineRuler } from "./TimelineRuler";
 import { TimelineToolbar } from "./TimelineToolbar";
@@ -34,248 +41,70 @@ interface TimelinePanelProps {
   onSequenceChange?: (nextSequence: TimelineSequence) => void;
 }
 
-export type TimelineInteractionMode = "move" | "resize-left" | "resize-right";
-
-export interface TimelineDragState {
-  clip: TimelineClip;
-  mode: TimelineInteractionMode;
-  sourceTrackId: string;
-  sourceTrackIndex: number;
-  targetTrackIndex: number;
-  startPointerX: number;
-  startPointerY: number;
-  currentPointerY: number;
-  pointerOffsetX: number;
-  previewStartFrame: number;
-  previewDurationFrames: number;
-}
-
-export interface TimelineExternalPreview {
-  trackIndex: number;
-  startFrame: number;
-  durationFrames: number;
-  label: string;
-  mediaType: TimelineTrackType;
-  source: "asset" | "element";
-  mediaUrl?: string;
-}
-
-const MIN_CLIP_DURATION_FRAMES = 6;
 const SNAP_THRESHOLD_PX = 10;
 const RESIZE_HIT_ZONE_HEIGHT_PX = 8;
 const MIN_TIMELINE_HEIGHT_PX = 180;
 const MIN_PREVIEW_HEIGHT_PX = 120;
 const DEFAULT_TIMELINE_HEIGHT_PX = 280;
 
-const clamp = (value: number, min: number, max: number) => {
-  if (value < min) {
-    return min;
-  }
-
-  if (value > max) {
-    return max;
-  }
-
-  return value;
-};
-
-const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
-  if (typeof item.previewX === "number" && typeof item.previewY === "number" && typeof item.previewWidth === "number" && typeof item.previewHeight === "number") {
-    return {
-      previewX: clamp(item.previewX, 0, 0.92),
-      previewY: clamp(item.previewY, 0, 0.92),
-      previewWidth: clamp(item.previewWidth, 0.08, 1),
-      previewHeight: clamp(item.previewHeight, 0.08, 1),
-    };
-  }
-
-  if (item.source === "asset" && item.mediaType === "video") {
-    return {
-      previewX: 0,
-      previewY: 0,
-      previewWidth: 1,
-      previewHeight: 1,
-    };
-  }
-
-  const loweredLabel = item.label.toLowerCase();
-  const isTextPreset = /(title|subtitle|header|text|quote|description|body|h1|h2|h3)/i.test(loweredLabel);
-
-  if (isTextPreset) {
-    if (loweredLabel.includes("subtitle")) {
-      return {
-        previewX: 0.26,
-        previewY: 0.78,
-        previewWidth: 0.48,
-        previewHeight: 0.11,
-      };
-    }
-
-    if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
-      return {
-        previewX: 0.28,
-        previewY: 0.1,
-        previewWidth: 0.44,
-        previewHeight: 0.14,
-      };
-    }
-
-    if (loweredLabel.includes("h2") || loweredLabel.includes("h3") || loweredLabel.includes("header")) {
-      return {
-        previewX: 0.3,
-        previewY: 0.18,
-        previewWidth: 0.4,
-        previewHeight: 0.12,
-      };
-    }
-
-    return {
-      previewX: 0.28,
-      previewY: 0.3,
-      previewWidth: 0.44,
-      previewHeight: 0.16,
-    };
-  }
-
-  if (loweredLabel.includes("circle")) {
-    return {
-      previewX: 0.39,
-      previewY: 0.32,
-      previewWidth: 0.22,
-      previewHeight: 0.22,
-    };
-  }
-
-  if (loweredLabel.includes("triangle")) {
-    return {
-      previewX: 0.35,
-      previewY: 0.36,
-      previewWidth: 0.3,
-      previewHeight: 0.22,
-    };
-  }
-
-  if (loweredLabel.includes("line")) {
-    return {
-      previewX: 0.25,
-      previewY: 0.47,
-      previewWidth: 0.5,
-      previewHeight: 0.07,
-    };
-  }
-
-  return {
-    previewX: 0.33,
-    previewY: 0.3,
-    previewWidth: 0.34,
-    previewHeight: 0.2,
-  };
-};
-const collectSnapFrames = (
-  tracks: TimelineTrack[],
-  sequenceDurationFrames: number,
-  excludedClipIds: Set<string>,
-): number[] => {
-  const frames = new Set<number>([0, sequenceDurationFrames]);
-
-  for (const track of tracks) {
-    for (const clip of track.clips) {
-      if (excludedClipIds.has(clip.id)) {
-        continue;
-      }
-
-      frames.add(clip.startFrame);
-      frames.add(clip.startFrame + clip.durationFrames);
-    }
-  }
-
-  return Array.from(frames);
-};
-
-const getBestSnap = (
-  anchors: number[],
-  candidates: number[],
-  thresholdFrames: number,
-): { offsetFrames: number; guideFrame: number | null } => {
-  let bestOffset: number | null = null;
-  let bestGuideFrame: number | null = null;
-
-  for (const anchor of anchors) {
-    for (const candidate of candidates) {
-      const offsetFrames = candidate - anchor;
-      if (Math.abs(offsetFrames) > thresholdFrames) {
-        continue;
-      }
-
-      if (bestOffset === null || Math.abs(offsetFrames) < Math.abs(bestOffset)) {
-        bestOffset = offsetFrames;
-        bestGuideFrame = candidate;
-      }
-    }
-  }
-
-  return {
-    offsetFrames: bestOffset ?? 0,
-    guideFrame: bestGuideFrame,
-  };
-};
-
-const updateTracksForDrop = (
-  tracks: TimelineTrack[],
-  dragState: TimelineDragState,
-): TimelineTrack[] => {
-  const droppedClip: TimelineClip = {
-    ...dragState.clip,
-    startFrame: dragState.previewStartFrame,
-    durationFrames: dragState.previewDurationFrames,
-  };
-
-  const tracksWithoutClip = tracks.map((track) => ({
-    ...track,
-    clips: track.clips.filter((clip) => clip.id !== dragState.clip.id),
-  }));
-
-  return tracksWithoutClip.map((track, trackIndex) => {
-    if (trackIndex !== dragState.targetTrackIndex) {
-      return track;
-    }
-
-    return {
-      ...track,
-      clips: [...track.clips, droppedClip].sort((a, b) => a.startFrame - b.startFrame),
-    };
-  });
-};
-
 const parseExternalDropItem = (
   event: ReactDragEvent<HTMLDivElement>,
 ): SidebarTimelineItem | null => parseTimelineDragItemFromDataTransfer(event.dataTransfer);
 
+const buildDroppedClipFromDragState = (dragState: TimelineDragState): TimelineClip => ({
+  ...dragState.clip,
+  startFrame: dragState.previewStartFrame,
+  durationFrames: dragState.previewDurationFrames,
+});
+
 export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps) => {
   const [tracks, setTracks] = useState<TimelineTrack[]>(sequence.tracks);
-  const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
-  const [lastSelectedClipId, setLastSelectedClipId] = useState<string | null>(null);
   const [dropTargetTrackIndex, setDropTargetTrackIndex] = useState<number | null>(null);
   const [externalPreview, setExternalPreview] = useState<TimelineExternalPreview | null>(null);
   const [snapGuideFrame, setSnapGuideFrame] = useState<number | null>(null);
   const [dragState, setDragState] = useState<TimelineDragState | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
-  const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [timelineHeightPx, setTimelineHeightPx] = useState(DEFAULT_TIMELINE_HEIGHT_PX);
 
   const timelinePanelRef = useRef<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const timelineCanvasRef = useRef<HTMLDivElement | null>(null);
   const trackListRef = useRef<HTMLDivElement | null>(null);
-  const rafIdRef = useRef<number | null>(null);
-  const playbackStartPerfRef = useRef<number>(0);
-  const currentTimeMsRef = useRef<number>(0);
 
-  useEffect(() => {
-    currentTimeMsRef.current = currentTimeMs;
-  }, [currentTimeMs] );
+  const clipIdOrder = useMemo(
+    () =>
+      tracks.flatMap((track) =>
+        [...track.clips]
+          .sort((left, right) => left.startFrame - right.startFrame)
+          .map((clip) => clip.id),
+      ),
+    [tracks],
+  );
+
+  const {
+    selectedClipIds,
+    selectedClipIdSet,
+    clearSelection,
+    selectSingleClip,
+    applySelection,
+  } = useTimelineSelection(clipIdOrder);
+
+  const {
+    currentFrame,
+    currentTimeMs,
+    frameStepMs,
+    isPlaying,
+    setCurrentTimeMs,
+    setIsPlaying,
+    togglePlayback,
+    totalDurationMs,
+  } = useTimelinePlayback({
+    durationFrames: sequence.durationFrames,
+    frameRate: sequence.frameRate,
+    isScrubbing,
+  });
+
   useEffect(() => {
     if (!onSequenceChange) {
       return;
@@ -286,45 +115,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       tracks,
     });
   }, [onSequenceChange, sequence, tracks]);
-
-  const totalDurationMs = useMemo(
-    () => (sequence.durationFrames / sequence.frameRate) * 1000,
-    [sequence.durationFrames, sequence.frameRate],
-  );
-
-  useEffect(() => {
-    if (!isPlaying || isScrubbing) {
-      if (rafIdRef.current !== null) {
-        window.cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      return;
-    }
-
-    playbackStartPerfRef.current = performance.now() - currentTimeMsRef.current;
-
-    const updatePlayback = (now: number) => {
-      const nextTimeMs = Math.min(now - playbackStartPerfRef.current, totalDurationMs);
-
-      setCurrentTimeMs(nextTimeMs);
-
-      if (nextTimeMs >= totalDurationMs) {
-        setIsPlaying(false);
-        return;
-      }
-
-      rafIdRef.current = window.requestAnimationFrame(updatePlayback);
-    };
-
-    rafIdRef.current = window.requestAnimationFrame(updatePlayback);
-
-    return () => {
-      if (rafIdRef.current !== null) {
-        window.cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-    };
-  }, [isPlaying, isScrubbing, totalDurationMs]);
 
   useEffect(() => {
     const clearSelectionOnOutsideClick = (event: PointerEvent) => {
@@ -338,8 +128,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         return;
       }
 
-      setSelectedClipIds([]);
-      setLastSelectedClipId(null);
+      clearSelection();
     };
 
     window.addEventListener("pointerdown", clearSelectionOnOutsideClick);
@@ -347,7 +136,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     return () => {
       window.removeEventListener("pointerdown", clearSelectionOnOutsideClick);
     };
-  }, []);
+  }, [clearSelection]);
 
   useEffect(() => {
     if (!viewportRef.current) {
@@ -369,6 +158,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       observer.disconnect();
     };
   }, []);
+
   useEffect(() => {
     const panelElement = timelinePanelRef.current;
     if (!panelElement) {
@@ -382,8 +172,8 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         MIN_TIMELINE_HEIGHT_PX,
       );
 
-      setTimelineHeightPx((current) =>
-        clamp(current, MIN_TIMELINE_HEIGHT_PX, maxTimelineHeightPx),
+      setTimelineHeightPx((currentHeightPx) =>
+        clamp(currentHeightPx, MIN_TIMELINE_HEIGHT_PX, maxTimelineHeightPx),
       );
     };
 
@@ -401,14 +191,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
   }, []);
 
   const maxTrackIndex = useMemo(() => Math.max(tracks.length - 1, 0), [tracks.length]);
-
-  const clipIdOrder = useMemo(() => {
-    return tracks.flatMap((track) =>
-      [...track.clips]
-        .sort((a, b) => a.startFrame - b.startFrame)
-        .map((clip) => clip.id),
-    );
-  }, [tracks]);
 
   const framePixelRatio = useMemo(() => {
     const baseLaneWidth = sequence.durationFrames * TIMELINE_LAYOUT.framePixelRatio;
@@ -429,14 +211,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     return TIMELINE_LAYOUT.labelColumnWidth + laneWidth;
   }, [framePixelRatio, sequence.durationFrames]);
 
-  const currentFrame = useMemo(() => {
-    if (totalDurationMs <= 0) {
-      return 0;
-    }
-
-    return (currentTimeMs / totalDurationMs) * sequence.durationFrames;
-  }, [currentTimeMs, sequence.durationFrames, totalDurationMs]);
-
   const playheadOffsetPx = useMemo(
     () => clamp(currentFrame * framePixelRatio, 0, sequence.durationFrames * framePixelRatio),
     [currentFrame, framePixelRatio, sequence.durationFrames],
@@ -445,7 +219,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
   const updateTimeFromClientX = useCallback(
     (clientX: number) => {
       const canvasRect = timelineCanvasRef.current?.getBoundingClientRect();
-
       if (!canvasRect) {
         return;
       }
@@ -460,7 +233,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       const nextTimeMs = (nextFrame / sequence.frameRate) * 1000;
       setCurrentTimeMs(nextTimeMs);
     },
-    [framePixelRatio, sequence.durationFrames, sequence.frameRate],
+    [framePixelRatio, sequence.durationFrames, sequence.frameRate, setCurrentTimeMs],
   );
 
   const startScrubbing = useCallback(
@@ -472,34 +245,20 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       event.preventDefault();
       setIsPlaying(false);
       setIsScrubbing(true);
-      setSelectedClipIds([]);
-      setLastSelectedClipId(null);
+      clearSelection();
       updateTimeFromClientX(event.clientX);
     },
-    [dragState, updateTimeFromClientX],
+    [clearSelection, dragState, setIsPlaying, updateTimeFromClientX],
   );
-
-  const frameStepMs = useMemo(() => 1000 / sequence.frameRate, [sequence.frameRate]);
-
-  const handleTogglePlayback = useCallback(() => {
-    setIsPlaying((current) => {
-      if (current) {
-        return false;
-      }
-
-      setCurrentTimeMs((timeMs) => (timeMs >= totalDurationMs ? 0 : timeMs));
-      return true;
-    });
-  }, [totalDurationMs]);
 
   const handlePanelSplitterPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       const toolbarRect = event.currentTarget.getBoundingClientRect();
       const isInResizeHitZone = event.clientY - toolbarRect.top <= RESIZE_HIT_ZONE_HEIGHT_PX;
-
       if (!isInResizeHitZone) {
         return;
       }
+
       event.preventDefault();
 
       const panelElement = timelinePanelRef.current;
@@ -550,12 +309,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       }
 
       const tag = target.tagName;
-      return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        target.isContentEditable
-      );
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -570,29 +324,19 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
 
         event.preventDefault();
         const selectedSet = new Set(selectedClipIds);
-
         setTracks((currentTracks) =>
           currentTracks.map((track) => ({
             ...track,
             clips: track.clips.filter((clip) => !selectedSet.has(clip.id)),
           })),
         );
-
-        setSelectedClipIds([]);
-        setLastSelectedClipId(null);
+        clearSelection();
         return;
       }
 
       if (event.code === "Space") {
         event.preventDefault();
-        setIsPlaying((current) => {
-          if (current) {
-            return false;
-          }
-
-          setCurrentTimeMs((timeMs) => (timeMs >= totalDurationMs ? 0 : timeMs));
-          return true;
-        });
+        togglePlayback();
         return;
       }
 
@@ -615,58 +359,21 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [frameStepMs, selectedClipIds, totalDurationMs]);
-
-  const applySelection = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>, clipId: string) => {
-      const isToggle = event.metaKey || event.ctrlKey;
-      const isRange = event.shiftKey;
-
-      setSelectedClipIds((currentSelectedIds) => {
-        if (isRange && lastSelectedClipId) {
-          const currentIndex = clipIdOrder.indexOf(clipId);
-          const anchorIndex = clipIdOrder.indexOf(lastSelectedClipId);
-
-          if (currentIndex >= 0 && anchorIndex >= 0) {
-            const from = Math.min(currentIndex, anchorIndex);
-            const to = Math.max(currentIndex, anchorIndex);
-            return clipIdOrder.slice(from, to + 1);
-          }
-        }
-
-        if (isToggle) {
-          if (currentSelectedIds.includes(clipId)) {
-            return currentSelectedIds.filter((id) => id !== clipId);
-          }
-
-          return [...currentSelectedIds, clipId];
-        }
-
-        return [clipId];
-      });
-
-      setLastSelectedClipId(clipId);
-      return !(isToggle || isRange);
-    },
-    [clipIdOrder, lastSelectedClipId],
-  );
+  }, [clearSelection, frameStepMs, selectedClipIds, setCurrentTimeMs, setIsPlaying, togglePlayback, totalDurationMs]);
 
   const startInteraction = useCallback(
     (
       event: ReactPointerEvent<HTMLDivElement>,
       clip: TimelineClip,
-      trackId: string,
       trackIndex: number,
       mode: TimelineInteractionMode,
     ) => {
       event.preventDefault();
 
       const clipRect = event.currentTarget.getBoundingClientRect();
-
       setDragState({
         clip,
         mode,
-        sourceTrackId: trackId,
         sourceTrackIndex: trackIndex,
         targetTrackIndex: trackIndex,
         startPointerX: event.clientX,
@@ -681,49 +388,35 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
   );
 
   const handleClipPointerDown = useCallback(
-    (
-      event: ReactPointerEvent<HTMLDivElement>,
-      clip: TimelineClip,
-      trackId: string,
-      trackIndex: number,
-    ) => {
-      const canStartDrag = applySelection(event, clip.id);
+    (event: ReactPointerEvent<HTMLDivElement>, clip: TimelineClip, trackIndex: number) => {
+      const canStartDrag = applySelection(
+        { toggle: event.metaKey || event.ctrlKey, range: event.shiftKey },
+        clip.id,
+      );
 
       if (!canStartDrag) {
         return;
       }
 
-      startInteraction(event, clip, trackId, trackIndex, "move");
+      startInteraction(event, clip, trackIndex, "move");
     },
     [applySelection, startInteraction],
   );
 
   const handleResizeLeftPointerDown = useCallback(
-    (
-      event: ReactPointerEvent<HTMLDivElement>,
-      clip: TimelineClip,
-      trackId: string,
-      trackIndex: number,
-    ) => {
-      setSelectedClipIds([clip.id]);
-      setLastSelectedClipId(clip.id);
-      startInteraction(event, clip, trackId, trackIndex, "resize-left");
+    (event: ReactPointerEvent<HTMLDivElement>, clip: TimelineClip, trackIndex: number) => {
+      selectSingleClip(clip.id);
+      startInteraction(event, clip, trackIndex, "resize-left");
     },
-    [startInteraction],
+    [selectSingleClip, startInteraction],
   );
 
   const handleResizeRightPointerDown = useCallback(
-    (
-      event: ReactPointerEvent<HTMLDivElement>,
-      clip: TimelineClip,
-      trackId: string,
-      trackIndex: number,
-    ) => {
-      setSelectedClipIds([clip.id]);
-      setLastSelectedClipId(clip.id);
-      startInteraction(event, clip, trackId, trackIndex, "resize-right");
+    (event: ReactPointerEvent<HTMLDivElement>, clip: TimelineClip, trackIndex: number) => {
+      selectSingleClip(clip.id);
+      startInteraction(event, clip, trackIndex, "resize-right");
     },
-    [startInteraction],
+    [selectSingleClip, startInteraction],
   );
 
   const handleTrackDragOver = useCallback(
@@ -767,7 +460,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         source: draggedItem.source,
         mediaUrl: draggedItem.mediaUrl,
       });
-
       setSnapGuideFrame(snap.guideFrame);
     },
     [framePixelRatio, sequence.durationFrames, tracks],
@@ -775,8 +467,12 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
 
   const handleTrackDragLeave = useCallback(
     (trackIndex: number) => {
-      setDropTargetTrackIndex((current) => (current === trackIndex ? null : current));
-      setExternalPreview((current) => (current?.trackIndex === trackIndex ? null : current));
+      setDropTargetTrackIndex((currentTrackIndex) =>
+        currentTrackIndex === trackIndex ? null : currentTrackIndex,
+      );
+      setExternalPreview((currentPreview) =>
+        currentPreview?.trackIndex === trackIndex ? null : currentPreview,
+      );
 
       if (!dragState) {
         setSnapGuideFrame(null);
@@ -803,7 +499,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         MIN_CLIP_DURATION_FRAMES,
         sequence.durationFrames,
       );
-
       const laneRect = event.currentTarget.getBoundingClientRect();
       const laneX = clamp(event.clientX - laneRect.left, 0, sequence.durationFrames * framePixelRatio);
       const maxStartFrame = Math.max(sequence.durationFrames - clipDurationFrames, 0);
@@ -817,21 +512,12 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         thresholdFrames,
       );
       const startFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
-
-      const previewDefaults = getPreviewDefaultsForItem(draggedItem);
-
-      const droppedClip: TimelineClip = {
+      const droppedClip = createTimelineClipFromSidebarItem({
         id: `clip-drop-${crypto.randomUUID()}`,
-        name: draggedItem.label,
+        item: draggedItem,
         startFrame,
         durationFrames: clipDurationFrames,
-        source: draggedItem.source,
-        mediaUrl: draggedItem.mediaUrl,
-        previewX: previewDefaults.previewX,
-        previewY: previewDefaults.previewY,
-        previewWidth: previewDefaults.previewWidth,
-        previewHeight: previewDefaults.previewHeight,
-      };
+      });
 
       setTracks((currentTracks) => {
         const track = currentTracks[trackIndex];
@@ -839,26 +525,16 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
           return currentTracks;
         }
 
-        return currentTracks.map((candidateTrack, candidateIndex) => {
-          if (candidateIndex !== trackIndex) {
-            return candidateTrack;
-          }
-
-          return {
-            ...candidateTrack,
-            clips: [...candidateTrack.clips, droppedClip].sort((a, b) => a.startFrame - b.startFrame),
-          };
-        });
+        return insertClipIntoTrack(currentTracks, trackIndex, droppedClip);
       });
 
-      setSelectedClipIds([droppedClip.id]);
-      setLastSelectedClipId(droppedClip.id);
+      selectSingleClip(droppedClip.id);
       setDropTargetTrackIndex(null);
       setExternalPreview(null);
       setSnapGuideFrame(null);
       clearCurrentTimelineDragItem();
     },
-    [framePixelRatio, sequence.durationFrames, tracks],
+    [framePixelRatio, selectSingleClip, sequence.durationFrames, tracks],
   );
 
   const handlePreviewExternalDrop = useCallback(
@@ -884,68 +560,48 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         thresholdFrames,
       );
       const startFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
-      const previewDefaults = getPreviewDefaultsForItem(draggedItem);
-      const previewPosition =
-        dropPoint && draggedItem.source === "element"
-          ? {
-              previewX: clamp(
-                dropPoint.x - previewDefaults.previewWidth / 2,
-                0,
-                Math.max(1 - previewDefaults.previewWidth, 0),
-              ),
-              previewY: clamp(
-                dropPoint.y - previewDefaults.previewHeight / 2,
-                0,
-                Math.max(1 - previewDefaults.previewHeight, 0),
-              ),
-              previewWidth: previewDefaults.previewWidth,
-              previewHeight: previewDefaults.previewHeight,
-            }
-          : previewDefaults;
-
-      const droppedClip: TimelineClip = {
+      const baseClip = createTimelineClipFromSidebarItem({
         id: `clip-drop-${crypto.randomUUID()}`,
-        name: draggedItem.label,
+        item: draggedItem,
         startFrame,
         durationFrames: clipDurationFrames,
-        source: draggedItem.source,
-        mediaUrl: draggedItem.mediaUrl,
-        previewX: previewPosition.previewX,
-        previewY: previewPosition.previewY,
-        previewWidth: previewPosition.previewWidth,
-        previewHeight: previewPosition.previewHeight,
-      };
+      });
 
-      setTracks((currentTracks) =>
-        currentTracks.map((track, index) => {
-          if (index !== targetTrackIndex) {
-            return track;
-          }
+      const droppedClip =
+        dropPoint && draggedItem.source === "element"
+          ? {
+              ...baseClip,
+              previewX: clamp(
+                dropPoint.x - (baseClip.previewWidth ?? 0.34) / 2,
+                0,
+                Math.max(1 - (baseClip.previewWidth ?? 0.34), 0),
+              ),
+              previewY: clamp(
+                dropPoint.y - (baseClip.previewHeight ?? 0.2) / 2,
+                0,
+                Math.max(1 - (baseClip.previewHeight ?? 0.2), 0),
+              ),
+            }
+          : baseClip;
 
-          return {
-            ...track,
-            clips: [...track.clips, droppedClip].sort((a, b) => a.startFrame - b.startFrame),
-          };
-        }),
-      );
-
-      setSelectedClipIds([droppedClip.id]);
-      setLastSelectedClipId(droppedClip.id);
+      setTracks((currentTracks) => insertClipIntoTrack(currentTracks, targetTrackIndex, droppedClip));
+      selectSingleClip(droppedClip.id);
       clearCurrentTimelineDragItem();
     },
-    [currentFrame, framePixelRatio, sequence.durationFrames, tracks],
+    [currentFrame, framePixelRatio, selectSingleClip, sequence.durationFrames, tracks],
   );
 
-  const handlePreviewClipSelect = useCallback((clipId: string | null) => {
-    if (!clipId) {
-      setSelectedClipIds([]);
-      setLastSelectedClipId(null);
-      return;
-    }
+  const handlePreviewClipSelect = useCallback(
+    (clipId: string | null) => {
+      if (!clipId) {
+        clearSelection();
+        return;
+      }
 
-    setSelectedClipIds([clipId]);
-    setLastSelectedClipId(clipId);
-  }, []);
+      selectSingleClip(clipId);
+    },
+    [clearSelection, selectSingleClip],
+  );
 
   const handlePreviewClipTransformChange = useCallback(
     (
@@ -989,7 +645,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
 
         if (currentDragState.mode === "move") {
           const trackListRect = trackListRef.current?.getBoundingClientRect();
-
           if (!trackListRect) {
             return currentDragState;
           }
@@ -998,7 +653,6 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
             (event.clientY - trackListRect.top) / TIMELINE_LAYOUT.trackHeight,
           );
           const nextTrackIndex = clamp(rawTrackIndex, 0, maxTrackIndex);
-
           const laneX =
             event.clientX -
             trackListRect.left -
@@ -1011,13 +665,11 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
             0,
             Math.max(maxStartFrame, 0),
           );
-
           const snap = getBestSnap(
             [rawStartFrame, rawStartFrame + currentDragState.previewDurationFrames],
             snapFrames,
             thresholdFrames,
           );
-
           const nextStartFrame = clamp(
             rawStartFrame + snap.offsetFrames,
             0,
@@ -1047,10 +699,8 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
             0,
             maxStartFrame,
           );
-
           const snap = getBestSnap([rawStartFrame], snapFrames, thresholdFrames);
           const nextStartFrame = clamp(rawStartFrame + snap.offsetFrames, 0, maxStartFrame);
-          const nextDurationFrames = originalClipEnd - nextStartFrame;
 
           setSnapGuideFrame(snap.guideFrame);
 
@@ -1058,7 +708,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
             ...currentDragState,
             targetTrackIndex: currentDragState.sourceTrackIndex,
             previewStartFrame: nextStartFrame,
-            previewDurationFrames: nextDurationFrames,
+            previewDurationFrames: originalClipEnd - nextStartFrame,
           };
         }
 
@@ -1096,15 +746,21 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         return null;
       }
 
-      setTracks((currentTracks) => updateTracksForDrop(currentTracks, currentDragState));
-      setSelectedClipIds([currentDragState.clip.id]);
-      setLastSelectedClipId(currentDragState.clip.id);
-
+      const droppedClip = buildDroppedClipFromDragState(currentDragState);
+      setTracks((currentTracks) =>
+        moveClipToTrack({
+          tracks: currentTracks,
+          clipId: currentDragState.clip.id,
+          targetTrackIndex: currentDragState.targetTrackIndex,
+          clip: droppedClip,
+        }),
+      );
+      selectSingleClip(currentDragState.clip.id);
       return null;
     });
 
     setSnapGuideFrame(null);
-  }, []);
+  }, [selectSingleClip]);
 
   useEffect(() => {
     if (!dragState && !isScrubbing) {
@@ -1135,7 +791,9 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       ref={timelinePanelRef}
       className={styles.timelinePanel}
       aria-label="Timeline panel"
-      style={{ gridTemplateRows: `minmax(${MIN_PREVIEW_HEIGHT_PX}px, 1fr) auto ${timelineHeightPx}px` }}
+      style={{
+        gridTemplateRows: `minmax(${MIN_PREVIEW_HEIGHT_PX}px, 1fr) auto ${timelineHeightPx}px`,
+      }}
     >
       <TimelinePreview
         tracks={tracks}
@@ -1153,7 +811,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         frameRate={sequence.frameRate}
         currentTimeMs={currentTimeMs}
         isPlaying={isPlaying}
-        onTogglePlayback={handleTogglePlayback}
+        onTogglePlayback={togglePlayback}
         onResizePointerDown={handlePanelSplitterPointerDown}
       />
 
@@ -1177,7 +835,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
             tracks={tracks}
             dragState={dragState}
             framePixelRatio={framePixelRatio}
-            selectedClipIds={selectedClipIds}
+            selectedClipIdSet={selectedClipIdSet}
             dropTargetTrackIndex={dropTargetTrackIndex}
             externalPreview={externalPreview}
             trackListRef={trackListRef}
@@ -1193,7 +851,9 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
           {snapGuideFrame !== null ? (
             <div
               className={styles.snapGuide}
-              style={{ left: `${TIMELINE_LAYOUT.labelColumnWidth + snapGuideFrame * framePixelRatio}px` }}
+              style={{
+                left: `${TIMELINE_LAYOUT.labelColumnWidth + snapGuideFrame * framePixelRatio}px`,
+              }}
               aria-hidden="true"
             />
           ) : null}
@@ -1211,18 +871,5 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     </section>
   );
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

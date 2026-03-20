@@ -1,7 +1,10 @@
-import { SidebarTimelineItem } from "@/features/timeline/lib/dragTransfer";
+﻿import { SidebarTimelineItem } from "@/features/timeline/lib/dragTransfer";
+import {
+  MIN_CLIP_DURATION_FRAMES,
+  createTimelineClipFromSidebarItem,
+  insertClipIntoTrack,
+} from "@/features/timeline/lib/clipPlacement";
 import { TimelineSequence } from "@/features/timeline/types/timeline";
-
-const TEXT_PRESET_PATTERN = /(title|subtitle|header|text|quote|description|body|h1|h2|h3)/i;
 
 export const isTimelineSequence = (value: unknown): value is TimelineSequence => {
   if (!value || typeof value !== "object") {
@@ -61,48 +64,6 @@ export const isTimelineSequence = (value: unknown): value is TimelineSequence =>
 export const hasTimelineChanged = (before: TimelineSequence, after: TimelineSequence) =>
   JSON.stringify(before) !== JSON.stringify(after);
 
-export const getPreviewDefaultsForItem = (item: SidebarTimelineItem) => {
-  if (item.source === "asset" && item.mediaType === "video") {
-    return {
-      previewX: 0,
-      previewY: 0,
-      previewWidth: 1,
-      previewHeight: 1,
-    };
-  }
-
-  const loweredLabel = item.label.toLowerCase();
-  if (TEXT_PRESET_PATTERN.test(loweredLabel)) {
-    if (loweredLabel.includes("subtitle")) {
-      return { previewX: 0.26, previewY: 0.78, previewWidth: 0.48, previewHeight: 0.11 };
-    }
-
-    if (loweredLabel.includes("h1") || loweredLabel.includes("hero")) {
-      return { previewX: 0.28, previewY: 0.1, previewWidth: 0.44, previewHeight: 0.14 };
-    }
-
-    if (loweredLabel.includes("h2") || loweredLabel.includes("h3") || loweredLabel.includes("header")) {
-      return { previewX: 0.3, previewY: 0.18, previewWidth: 0.4, previewHeight: 0.12 };
-    }
-
-    return { previewX: 0.28, previewY: 0.3, previewWidth: 0.44, previewHeight: 0.16 };
-  }
-
-  if (loweredLabel.includes("circle")) {
-    return { previewX: 0.39, previewY: 0.32, previewWidth: 0.22, previewHeight: 0.22 };
-  }
-
-  if (loweredLabel.includes("triangle")) {
-    return { previewX: 0.35, previewY: 0.36, previewWidth: 0.3, previewHeight: 0.22 };
-  }
-
-  if (loweredLabel.includes("line")) {
-    return { previewX: 0.25, previewY: 0.47, previewWidth: 0.5, previewHeight: 0.07 };
-  }
-
-  return { previewX: 0.33, previewY: 0.3, previewWidth: 0.34, previewHeight: 0.2 };
-};
-
 export const appendTimelineItemToSequence = (
   sequence: TimelineSequence,
   item: SidebarTimelineItem,
@@ -112,7 +73,7 @@ export const appendTimelineItemToSequence = (
     return null;
   }
 
-  const durationFrames = Math.max(Math.round(item.durationFrames), 6);
+  const durationFrames = Math.max(Math.round(item.durationFrames), MIN_CLIP_DURATION_FRAMES);
   const boundedDurationFrames = Math.min(durationFrames, sequence.durationFrames);
   const targetTrack = sequence.tracks[targetTrackIndex];
   const nextStartFrame = targetTrack.clips.reduce(
@@ -123,30 +84,15 @@ export const appendTimelineItemToSequence = (
     Math.max(nextStartFrame, 0),
     Math.max(sequence.durationFrames - boundedDurationFrames, 0),
   );
-  const previewDefaults = getPreviewDefaultsForItem(item);
-
-  const nextClip = {
+  const nextClip = createTimelineClipFromSidebarItem({
     id: `clip-click-${crypto.randomUUID()}`,
-    name: item.label,
+    item,
     startFrame,
     durationFrames: boundedDurationFrames,
-    source: item.source,
-    mediaUrl: item.mediaUrl,
-    previewX: previewDefaults.previewX,
-    previewY: previewDefaults.previewY,
-    previewWidth: previewDefaults.previewWidth,
-    previewHeight: previewDefaults.previewHeight,
-  };
+  });
 
   return {
     ...sequence,
-    tracks: sequence.tracks.map((track, index) =>
-      index !== targetTrackIndex
-        ? track
-        : {
-            ...track,
-            clips: [...track.clips, nextClip].sort((left, right) => left.startFrame - right.startFrame),
-          },
-    ),
+    tracks: insertClipIntoTrack(sequence.tracks, targetTrackIndex, nextClip),
   };
 };

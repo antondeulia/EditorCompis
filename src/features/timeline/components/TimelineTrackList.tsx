@@ -1,15 +1,15 @@
-import { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
+﻿import { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
 
 import { TimelineClip, TimelineTrack } from "@/features/timeline/types/timeline";
 
-import { TimelineDragState, TimelineExternalPreview } from "./TimelinePanel";
+import { TimelineDragState, TimelineExternalPreview } from "./timelineSharedTypes";
 import { TimelineTrackRow } from "./TimelineTrackRow";
 
 interface TimelineTrackListProps {
   tracks: TimelineTrack[];
   dragState: TimelineDragState | null;
   framePixelRatio: number;
-  selectedClipIds: string[];
+  selectedClipIdSet: ReadonlySet<string>;
   dropTargetTrackIndex: number | null;
   externalPreview: TimelineExternalPreview | null;
   trackListRef: RefObject<HTMLDivElement | null>;
@@ -20,19 +20,16 @@ interface TimelineTrackListProps {
   onClipPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     clip: TimelineClip,
-    trackId: string,
     trackIndex: number,
   ) => void;
   onResizeLeftPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     clip: TimelineClip,
-    trackId: string,
     trackIndex: number,
   ) => void;
   onResizeRightPointerDown: (
     event: ReactPointerEvent<HTMLDivElement>,
     clip: TimelineClip,
-    trackId: string,
     trackIndex: number,
   ) => void;
 }
@@ -41,7 +38,7 @@ export const TimelineTrackList = ({
   tracks,
   dragState,
   framePixelRatio,
-  selectedClipIds,
+  selectedClipIdSet,
   dropTargetTrackIndex,
   externalPreview,
   trackListRef,
@@ -62,7 +59,7 @@ export const TimelineTrackList = ({
           trackIndex={trackIndex}
           dragState={dragState}
           framePixelRatio={framePixelRatio}
-          selectedClipIds={selectedClipIds}
+          selectedClipIdSet={selectedClipIdSet}
           isDropTarget={trackIndex === dropTargetTrackIndex}
           externalPreview={externalPreview}
           onTrackDragOver={onTrackDragOver}

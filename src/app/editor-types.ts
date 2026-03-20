@@ -47,10 +47,15 @@ export interface AiEditStreamDeltaEvent {
   delta: string;
 }
 
+export interface AiEditStreamStartedEvent {
+  type: "assistant_started";
+}
+
 export type AiEditStreamEvent =
   | AiEditStreamDoneEvent
   | AiEditStreamErrorEvent
-  | AiEditStreamDeltaEvent;
+  | AiEditStreamDeltaEvent
+  | AiEditStreamStartedEvent;
 
 export interface TranscriptSegment {
   startSeconds: number;

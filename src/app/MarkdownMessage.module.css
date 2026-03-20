@@ -1,3 +1,9 @@
+﻿.message {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .message > *:first-child {
   margin-top: 0;
 }
@@ -7,7 +13,8 @@
 }
 
 .paragraph {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+  white-space: pre-wrap;
 }
 
 .heading1,
@@ -31,20 +38,32 @@
 }
 
 .list {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding-left: 18px;
 }
 
+.list li {
+  margin: 0 0 4px;
+  white-space: pre-wrap;
+}
+
 .blockquote {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding: 8px 10px;
   border-left: 3px solid #8db6f6;
   background: #eef5ff;
   color: #274163;
+  white-space: pre-wrap;
+}
+
+.rule {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid #d4dfef;
 }
 
 .codeBlock {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding: 10px;
   border-radius: 8px;
   background: #111827;
@@ -67,3 +86,4 @@
   color: #2f6fdf;
   text-decoration: underline;
 }
+

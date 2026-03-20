@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import {
   AiEditorAssetContext,
@@ -342,6 +342,7 @@ export async function POST(request: Request) {
           if (partialMessage === null || partialMessage.length <= streamedAssistantChars) {
             return;
           }
+          emitAssistantStarted();
           const delta = partialMessage.slice(streamedAssistantChars);
           streamedAssistantChars = partialMessage.length;
           emit({ type: "assistant_delta", delta });

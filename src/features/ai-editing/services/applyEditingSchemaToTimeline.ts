@@ -1,6 +1,8 @@
-﻿import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
+import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
 import {
   TimelineClip,
+  TimelineClipContent,
+  TimelineElementStyle,
   TimelineSequence,
   TimelineTrack,
   TimelineTrackType,
@@ -80,6 +82,63 @@ const ensureTrackIndex = (
   return resolveTrackIndex(tracks, trackType, safeIndexWithinType);
 };
 
+const normalizeContentText = (value: string | null | undefined) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const toTimelineContent = (
+  clip: EditingSchema["tracks"][number]["clips"][number],
+): TimelineClipContent | undefined => {
+  if (!clip.content) {
+    return undefined;
+  }
+
+  const content: TimelineClipContent = {
+    displayText: normalizeContentText(clip.content.displayText),
+    narrationText: normalizeContentText(clip.content.narrationText),
+    designIntent: normalizeContentText(clip.content.designIntent),
+  };
+
+  return Object.values(content).some((value) => typeof value === "string") ? content : undefined;
+};
+
+const toTimelineElementStyle = (
+  clip: EditingSchema["tracks"][number]["clips"][number],
+): TimelineElementStyle | undefined => {
+  if (!clip.elementStyle) {
+    return undefined;
+  }
+
+  const style: TimelineElementStyle = {
+    fillColor: normalizeContentText(clip.elementStyle.fillColor),
+    accentColor: normalizeContentText(clip.elementStyle.accentColor),
+    textColor: normalizeContentText(clip.elementStyle.textColor),
+    strokeColor: normalizeContentText(clip.elementStyle.strokeColor),
+    backgroundColor: normalizeContentText(clip.elementStyle.backgroundColor),
+    backgroundOpacity:
+      typeof clip.elementStyle.backgroundOpacity === "number"
+        ? clamp(clip.elementStyle.backgroundOpacity, 0, 1)
+        : undefined,
+    borderRadiusPx:
+      typeof clip.elementStyle.borderRadiusPx === "number"
+        ? clamp(clip.elementStyle.borderRadiusPx, 0, 64)
+        : undefined,
+    textAlign:
+      clip.elementStyle.textAlign === "left" ||
+      clip.elementStyle.textAlign === "center" ||
+      clip.elementStyle.textAlign === "right"
+        ? clip.elementStyle.textAlign
+        : undefined,
+  };
+
+  return Object.values(style).some((value) => value !== undefined) ? style : undefined;
+};
+
 const toTimelineClip = (
   trackId: string,
   trackType: TimelineTrackType,
@@ -127,6 +186,12 @@ const toTimelineClip = (
       subtitlePaddingXPx: clip.subtitlePaddingXPx ?? undefined,
       subtitlePaddingYPx: clip.subtitlePaddingYPx ?? undefined,
     },
+    elementPreset:
+      typeof clip.elementPreset === "string" && clip.elementPreset.trim().length > 0
+        ? clip.elementPreset.trim()
+        : undefined,
+    content: toTimelineContent(clip),
+    elementStyle: toTimelineElementStyle(clip),
   };
 };
 
@@ -173,5 +238,3 @@ export const applyEditingSchemaToTimeline = (
     tracks: nextTracks,
   };
 };
-
-

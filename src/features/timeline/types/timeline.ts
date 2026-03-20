@@ -1,4 +1,23 @@
-﻿export type TimelineTrackType = "video" | "audio" | "subtitle";
+export type TimelineTrackType = "video" | "audio" | "subtitle";
+
+export type TimelineTextAlign = "left" | "center" | "right";
+
+export interface TimelineClipContent {
+  displayText?: string;
+  narrationText?: string;
+  designIntent?: string;
+}
+
+export interface TimelineElementStyle {
+  fillColor?: string;
+  accentColor?: string;
+  textColor?: string;
+  strokeColor?: string;
+  backgroundColor?: string;
+  backgroundOpacity?: number;
+  borderRadiusPx?: number;
+  textAlign?: TimelineTextAlign;
+}
 
 export interface TimelineSubtitleStyle {
   subtitleTextColor?: string;
@@ -25,6 +44,9 @@ export interface TimelineClip {
   previewWidth?: number;
   previewHeight?: number;
   subtitleStyle?: TimelineSubtitleStyle;
+  elementPreset?: string;
+  content?: TimelineClipContent;
+  elementStyle?: TimelineElementStyle;
 }
 
 export interface TimelineTrack {
@@ -41,6 +63,3 @@ export interface TimelineSequence {
   durationFrames: number;
   tracks: TimelineTrack[];
 }
-
-
-
