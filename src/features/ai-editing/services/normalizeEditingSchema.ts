@@ -1,11 +1,32 @@
-import { AiEditorAssetContext } from '@/features/ai-editing/agent/editorAgent';
+import { AiEditorAssetContext } from "@/features/ai-editing/agent/editorAgent";
 import {
   EditingSchema,
   EditingSchemaClip,
   EditingSchemaClipContent,
   EditingSchemaElementStyle,
-} from '@/features/ai-editing/types/editingSchema';
-import { TimelineSequence, TimelineTrackType } from '@/features/timeline/types/timeline';
+} from "@/features/ai-editing/types/editingSchema";
+import { TimelineSequence, TimelineTrackType } from "@/features/timeline/types/timeline";
+
+import {
+  DEFAULT_VIEWPORT_ASPECT_RATIO,
+  RequestAnalysis,
+  analyzeUserRequest,
+  clamp,
+  getAspectRatioLabel,
+  sanitizeNullableText,
+  sanitizeText,
+} from "./requestAnalysis";
+import {
+  SceneLayoutVariant,
+  SceneRole,
+  createStarterMontageTracks,
+  getCompositionSummary,
+  getLayoutSummary,
+  getRoleLayoutForVariant,
+  getSceneLayoutVariant,
+  getSceneTextAlign,
+  getStarterMontageDurationFrames,
+} from "./storyboardPlanning";
 
 interface NormalizeEditingSchemaInput {
   schema: EditingSchema;
@@ -20,28 +41,6 @@ interface EnsureNonEmptyEditingSchemaForIntentInput {
   userMessage: string;
 }
 
-interface StoryboardScene {
-  label: string;
-  title: string;
-  body: string;
-  list: string[];
-  narration: string;
-  accentPreset: string;
-  designIntent: string;
-  motionNote: string;
-  layoutVariant: SceneLayoutVariant;
-  visual: string;
-}
-
-interface FallbackTheme {
-  backgroundPreset: string;
-  backgroundColor: string;
-  textColor: string;
-  surfaceColor: string;
-  accentColor: string;
-  lineColor: string;
-}
-
 interface ScenePlanSummary {
   startFrame: number;
   endFrame: number;
@@ -50,117 +49,67 @@ interface ScenePlanSummary {
   body: string | null;
   list: string[];
   visual: string | null;
+  narration: string | null;
   layout: string;
   motion: string;
 }
 
-type SceneRole = 'background' | 'label' | 'title' | 'body' | 'list' | 'graphic' | 'accent' | 'subtitle';
-type SceneLayoutVariant = 'split-left' | 'split-right' | 'stacked' | 'poster' | 'center-focus';
+interface SceneInspectionEntry {
+  trackType: TimelineTrackType;
+  clip: EditingSchemaClip;
+  role: SceneRole;
+}
+
+interface SceneEditableEntry extends SceneInspectionEntry {
+  trackIndex: number;
+  clipIndex: number;
+}
 
 const KNOWN_PRESET_NAMES = [
-  'Hero Title (H1)',
-  'Section Title (H2)',
-  'Topic Header (H3)',
-  'Subtitle',
-  'Description',
-  'Body Text',
-  'Quote Block',
-  'Solid Rectangle',
-  'Circle Pulse',
-  'Triangle Marker',
-  'Line Accent',
-  'Lower Third Pro',
-  'Callout Bubble',
-  'Progress Bar',
-  'Split Screen',
-  'Arrow Swipe',
-  'Star Burst',
-  'White Background',
+  "Hero Title (H1)",
+  "Section Title (H2)",
+  "Topic Header (H3)",
+  "Subtitle",
+  "Description",
+  "Body Text",
+  "Quote Block",
+  "Solid Rectangle",
+  "Circle Pulse",
+  "Triangle Marker",
+  "Line Accent",
+  "Lower Third Pro",
+  "Callout Bubble",
+  "Progress Bar",
+  "Split Screen",
+  "Arrow Swipe",
+  "Star Burst",
+  "White Background",
 ] as const;
 
-const DEFAULT_VIEWPORT_ASPECT_RATIO = 16 / 9;
-const STARTER_SCENE_MIN_DURATION_FRAMES = 84;
 const SCENE_GROUPING_TOLERANCE_FRAMES = 18;
 
-const ENGLISH_EDIT_INTENT_PATTERN =
-  /\b(make|create|build|generate|edit|montage|video|scene|storyboard|rebuild|add|insert|subtitle|captions?|animate|animation|transition|timing|pace|layout|style|trim|cut|lesson|tutorial|guide|explainer|presentation)\b/i;
-const CYRILLIC_EDIT_INTENT_PATTERN =
-  /(сделай|создай|сгенер|видео|сцен|монтаж|смонт|добав|анимац|переход|таймлайн|структур|урок|объясн|презентац|оформи|макет|размести|субтитр|титр)/i;
-const SMALL_TALK_ONLY_PATTERN = /^(hi|hello|hey|yo|привет|здравствуй|здравствуйте|добрый день|добрый вечер)[!.,\s]*$/i;
-
-const GENERATED_VIDEO_REQUEST_PATTERN =
-  /\b(full|complete|educational|explain|explainer|lesson|tutorial|guide|overview|walkthrough|presentation|storyboard|topic)\b/i;
-const RUSSIAN_GENERATED_VIDEO_REQUEST_PATTERN =
-  /(полноц|образовательн|объясни|объясняющ|урок|гайд|разбор|презентац|структур|по теме|на тему|сделай видео|создай видео)/i;
-
-const EXPLICIT_ASPECT_RATIO_PATTERN = /(?:^|[^\d])(\d{1,2})\s*(?::|x|\/)\s*(\d{1,2})(?:[^\d]|$)/i;
-const VERTICAL_FORMAT_PATTERN = /(vertical|portrait|tiktok|reels?|shorts?|stories?|snapchat|вертикал|портрет|тикток|рилс|шортс|сторис)/i;
-const SQUARE_FORMAT_PATTERN = /(square|instagram post|feed post|квадрат)/i;
-const LANDSCAPE_FORMAT_PATTERN = /(horizontal|landscape|widescreen|youtube|горизонтал|широкий|ютуб)/i;
-const LIGHT_BACKGROUND_PATTERN = /(white background|white bg|light background|бел(?:ый|ом|ом фоне)|светл(?:ый|ом) фон)/i;
-const DARK_BACKGROUND_PATTERN = /(dark background|black background|темн(?:ый|ом) фон|черн(?:ый|ом) фон)/i;
-const CYRILLIC_PATTERN = /[А-Яа-яЁё]/;
-
-const hasPurpleBackgroundRequest = (userMessage: string) => {
-  const normalizedMessage = userMessage.toLowerCase();
-  return (
-    normalizedMessage.includes('purple') ||
-    normalizedMessage.includes('violet') ||
-    normalizedMessage.includes('??????') ||
-    normalizedMessage.includes('???????')
-  );
-};
-
-const clamp = (value: number, min: number, max: number) => {
-  if (value < min) {
-    return min;
-  }
-
-  if (value > max) {
-    return max;
-  }
-
-  return value;
-};
-
-const sanitizeText = (value: string | null | undefined, fallback: string) => {
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
-};
-
-const sanitizeNullableText = (value: string | null | undefined) => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const trimmed = value.replace(/\s+/g, ' ').trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const prefersRussian = (userMessage: string) => CYRILLIC_PATTERN.test(userMessage);
+const EXPLICIT_AUDIO_REQUEST_PATTERN = /(voice|voiceover|narration|audio|music|sound|озвуч|диктор|голос|музык|звук)/i;
 
 const tokenize = (value: string) =>
   value
     .toLowerCase()
-    .split(/[^a-z0-9а-яё]+/i)
+    .split(/[^a-zР°-СЏС‘0-9]+/i)
     .map((token) => token.trim())
     .filter((token) => token.length >= 3);
 
 const isBackgroundDescriptor = (descriptor: string) =>
-  descriptor.includes('background') || descriptor.includes('backdrop') || descriptor.includes('фон');
+  descriptor.includes("background") || descriptor.includes("backdrop") || descriptor.includes("С„РѕРЅ");
 
 const isTitleDescriptor = (descriptor: string) =>
-  /(hero title|section title|topic header|title|header|heading|h1|h2|h3|заголов)/i.test(descriptor);
+  /(hero title|section title|topic header|title|header|heading|h1|h2|h3|Р·Р°РіРѕР»РѕРІ|С‚РёС‚СѓР»)/i.test(
+    descriptor,
+  );
 
 const isBodyDescriptor = (descriptor: string) =>
-  /(description|body text|body|quote|описан|текст|цитат)/i.test(descriptor);
+  /(description|body text|body|quote|РѕРїРёСЃР°РЅ|С‚РµРєСЃС‚|С†РёС‚Р°С‚|copy)/i.test(descriptor);
 
 const isGraphicDescriptor = (descriptor: string) =>
-  /(rectangle|circle|triangle|line accent|lower third|callout|progress|split|arrow|burst|shape|card|placeholder|прямоуголь|круг|треуголь|линия|плейсхолдер|фигура)/i.test(
+  /(rectangle|circle|triangle|line accent|lower third|callout|progress|split|arrow|burst|shape|card|placeholder|graphic|С„РёРіСѓСЂ|РіСЂР°С„РёРє|РєР°СЂС‚РѕС‡|РїР»Р°С€Рє)/i.test(
     descriptor,
   );
 
@@ -170,7 +119,7 @@ const isListText = (value: string | null | undefined) => {
     return false;
   }
 
-  return text.includes('\n') || /^[•\-*\d]/.test(text);
+  return text.includes("\n") || /^(?:[-*]|\d+[.)]?)/.test(text);
 };
 
 const splitListItems = (value: string | null | undefined) => {
@@ -181,7 +130,7 @@ const splitListItems = (value: string | null | undefined) => {
 
   return text
     .split(/\n+/)
-    .map((line) => line.replace(/^[\s•\-*\d.)]+/, '').trim())
+    .map((line) => line.replace(/^[\sвЂў\-*\d.)]+/, "").trim())
     .filter((line) => line.length > 0);
 };
 
@@ -200,20 +149,20 @@ const resolveAssetMediaUrl = (
   trackType: TimelineTrackType,
   assets: AiEditorAssetContext[],
 ): string | null => {
-  if (clip.source !== 'asset') {
+  if (clip.source !== "asset") {
     return null;
   }
 
-  if (typeof clip.mediaUrl === 'string' && clip.mediaUrl.trim().length > 0) {
+  if (typeof clip.mediaUrl === "string" && clip.mediaUrl.trim().length > 0) {
     return clip.mediaUrl;
   }
 
-  const expectedType = trackType === 'audio' ? 'audio' : 'video';
+  const expectedType = trackType === "audio" ? "audio" : "video";
   const candidates = assets.filter(
     (asset) =>
-      typeof asset.mediaUrl === 'string' &&
+      typeof asset.mediaUrl === "string" &&
       asset.mediaUrl.trim().length > 0 &&
-      (asset.mediaType === expectedType || asset.mediaType === 'unknown'),
+      (asset.mediaType === expectedType || asset.mediaType === "unknown"),
   );
 
   if (candidates.length === 0) {
@@ -225,8 +174,8 @@ const resolveAssetMediaUrl = (
   }
 
   const clipSearchText = [clip.name, clip.content?.displayText, clip.content?.designIntent]
-    .filter((value): value is string => typeof value === 'string')
-    .join(' ');
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
   const nameTokens = tokenize(clipSearchText);
   if (nameTokens.length === 0) {
     return candidates[0]?.mediaUrl ?? null;
@@ -247,7 +196,7 @@ const resolveAssetMediaUrl = (
 
     if (!bestMatch || overlap > bestMatch.score) {
       bestMatch = {
-        mediaUrl: candidate.mediaUrl ?? '',
+        mediaUrl: candidate.mediaUrl ?? "",
         score: overlap,
       };
     }
@@ -256,398 +205,37 @@ const resolveAssetMediaUrl = (
   return bestMatch?.mediaUrl || candidates[0]?.mediaUrl || null;
 };
 
-const hasExplicitEditIntent = (userMessage: string) => {
-  const message = userMessage.trim();
-  if (!message || SMALL_TALK_ONLY_PATTERN.test(message)) {
-    return false;
-  }
-
-  return ENGLISH_EDIT_INTENT_PATTERN.test(message) || CYRILLIC_EDIT_INTENT_PATTERN.test(message);
-};
-
-const requestNeedsGeneratedCoverage = (userMessage: string) => {
-  if (!hasExplicitEditIntent(userMessage)) {
-    return false;
-  }
-
-  return GENERATED_VIDEO_REQUEST_PATTERN.test(userMessage) || RUSSIAN_GENERATED_VIDEO_REQUEST_PATTERN.test(userMessage);
-};
-
-const inferRequestedAspectRatio = (userMessage: string): number | null => {
-  const explicitMatch = EXPLICIT_ASPECT_RATIO_PATTERN.exec(userMessage);
-  if (explicitMatch) {
-    const width = Number.parseFloat(explicitMatch[1] ?? '');
-    const height = Number.parseFloat(explicitMatch[2] ?? '');
-    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-      return width / height;
-    }
-  }
-
-  if (VERTICAL_FORMAT_PATTERN.test(userMessage)) {
-    return 9 / 16;
-  }
-
-  if (SQUARE_FORMAT_PATTERN.test(userMessage)) {
-    return 1;
-  }
-
-  if (LANDSCAPE_FORMAT_PATTERN.test(userMessage)) {
-    return 16 / 9;
-  }
-
-  return null;
-};
-
-const getAspectRatioLabel = (aspectRatio: number) => {
-  const presets = [
-    { label: '16:9', value: 16 / 9 },
-    { label: '9:16', value: 9 / 16 },
-    { label: '1:1', value: 1 },
-    { label: '4:5', value: 4 / 5 },
-    { label: '21:9', value: 21 / 9 },
-  ];
-
-  const matchedPreset = presets.find((preset) => Math.abs(preset.value - aspectRatio) <= 0.02);
-  if (matchedPreset) {
-    return matchedPreset.label;
-  }
-
-  const width = Math.max(1, Math.round(aspectRatio * 100));
-  return String(width) + ':100';
-};
-
-const deriveTopicTitle = (userMessage: string) => {
-  const topicalMatch = /(?:topic|theme|about|on|for|на тему|про|о)\s+([^.!?\n]+)/i.exec(userMessage)?.[1] ?? null;
-  if (topicalMatch?.trim()) {
-    return topicalMatch.trim();
-  }
-
-  const sanitized = userMessage.replace(/\s+/g, ' ').trim();
-  if (!sanitized) {
-    return 'Video Outline';
-  }
-
-  const prefixRemoved = sanitized.replace(/^(please|pls|hey|hi|hello|привет|сделай|создай|сгенерируй)\s+/i, '');
-  const candidate = prefixRemoved || sanitized;
-  return candidate.length > 72 ? candidate.slice(0, 69) + '...' : candidate;
-};
-
-const getFallbackTheme = (userMessage: string): FallbackTheme => {
-  if (hasPurpleBackgroundRequest(userMessage)) {
-    return {
-      backgroundPreset: 'Solid Rectangle',
-      backgroundColor: '#6D28D9',
-      textColor: '#F8FAFC',
-      surfaceColor: '#7C3AED',
-      accentColor: '#FDE68A',
-      lineColor: '#C4B5FD',
-    };
-  }
-
-  if (LIGHT_BACKGROUND_PATTERN.test(userMessage)) {
-    return {
-      backgroundPreset: 'White Background',
-      backgroundColor: '#FFFFFF',
-      textColor: '#101828',
-      surfaceColor: '#E8EEF9',
-      accentColor: '#2563EB',
-      lineColor: '#0EA5E9',
-    };
-  }
-
-  if (DARK_BACKGROUND_PATTERN.test(userMessage)) {
-    return {
-      backgroundPreset: 'Solid Rectangle',
-      backgroundColor: '#081120',
-      textColor: '#F8FAFC',
-      surfaceColor: '#1D4ED8',
-      accentColor: '#22C55E',
-      lineColor: '#F59E0B',
-    };
-  }
-
-  return {
-    backgroundPreset: 'Solid Rectangle',
-    backgroundColor: '#F8FAFC',
-    textColor: '#0F172A',
-    surfaceColor: '#DBEAFE',
-    accentColor: '#2563EB',
-    lineColor: '#60A5FA',
-  };
-};
-
-const getBackgroundSummary = (userMessage: string, isRussian: boolean) => {
-  if (hasPurpleBackgroundRequest(userMessage)) {
-    return isRussian ? '?????????? ???' : 'purple background';
-  }
-
-  if (LIGHT_BACKGROUND_PATTERN.test(userMessage)) {
-    return isRussian ? '????? ???' : 'white background';
-  }
-
-  if (DARK_BACKGROUND_PATTERN.test(userMessage)) {
-    return isRussian ? '?????? ???' : 'dark background';
-  }
-
-  return isRussian ? '?????? ??????????? ???' : 'clean neutral background';
-};
-
-const getCompositionSummary = (aspectRatio: number, isRussian: boolean) => {
-  if (aspectRatio < 0.85) {
-    return isRussian
-      ? '???????????? ??????????: ????????? ? ????????? ????? ??????, ???? ????????? ?????????? ????, ??? ???????? ???????? ? ?????????? ?????.'
-      : 'Vertical composition: headline and text stack at the top, a separate visual block below, and everything kept inside safe margins.';
-  }
-
-  if (aspectRatio <= 1.15) {
-    return isRussian
-      ? '????? ?????????? ??????????: ??????? ??????? ?????????, ?????????? ????????? ???? ? ????????? ???? ??? ??????? ??? ????????? ?????????.'
-      : 'Near square composition: strong top headline, compact text stack, and a separate graphic zone with no overlaps.';
-  }
-
-  return isRussian
-    ? '?????????? 16:9 ? ??????????? ?????? ? ?????? ??????????? ?????????: ????? ???? ???????? ??? split layout, ????? ??? stacked ??? poster.'
-    : '16 by 9 composition with safe margins and scene specific layout shifts: some scenes use split layouts, others use stacked or poster framing.';
-};
-
-
-const getSceneLayoutVariant = (sceneIndex: number, aspectRatio: number): SceneLayoutVariant => {
-  if (aspectRatio < 0.85) {
-    return sceneIndex % 2 === 0 ? 'stacked' : 'center-focus';
-  }
-
-  if (aspectRatio <= 1.15) {
-    return sceneIndex % 2 === 0 ? 'poster' : 'stacked';
-  }
-
-  const variants: SceneLayoutVariant[] = ['poster', 'split-left', 'stacked', 'split-right', 'center-focus'];
-  return variants[sceneIndex % variants.length] ?? 'split-left';
-};
-
-const getRoleLayoutForVariant = (
-  role: SceneRole,
-  aspectRatio: number,
-  layoutVariant: SceneLayoutVariant,
-): { previewX: number; previewY: number; previewWidth: number; previewHeight: number } => {
-  if (role === 'background' || role === 'subtitle') {
-    return getDefaultRoleLayout(role, aspectRatio, 0);
-  }
-
-  if (aspectRatio < 0.85) {
-    return getDefaultRoleLayout(role, aspectRatio, 0);
-  }
-
-  switch (layoutVariant) {
-    case 'split-right':
-      switch (role) {
-        case 'label':
-          return { previewX: 0.62, previewY: 0.1, previewWidth: 0.2, previewHeight: 0.05 };
-        case 'title':
-          return { previewX: 0.5, previewY: 0.18, previewWidth: 0.32, previewHeight: 0.16 };
-        case 'accent':
-          return { previewX: 0.68, previewY: 0.36, previewWidth: 0.14, previewHeight: 0.012 };
-        case 'body':
-          return { previewX: 0.5, previewY: 0.4, previewWidth: 0.32, previewHeight: 0.11 };
-        case 'list':
-          return { previewX: 0.5, previewY: 0.56, previewWidth: 0.3, previewHeight: 0.18 };
-        case 'graphic':
-          return { previewX: 0.1, previewY: 0.18, previewWidth: 0.3, previewHeight: 0.58 };
-        default:
-          return getDefaultRoleLayout(role, aspectRatio, 0);
-      }
-    case 'stacked':
-      switch (role) {
-        case 'label':
-          return { previewX: 0.1, previewY: 0.08, previewWidth: 0.18, previewHeight: 0.05 };
-        case 'title':
-          return { previewX: 0.1, previewY: 0.16, previewWidth: 0.74, previewHeight: 0.14 };
-        case 'accent':
-          return { previewX: 0.1, previewY: 0.32, previewWidth: 0.16, previewHeight: 0.012 };
-        case 'body':
-          return { previewX: 0.1, previewY: 0.38, previewWidth: 0.74, previewHeight: 0.09 };
-        case 'list':
-          return { previewX: 0.1, previewY: 0.5, previewWidth: 0.72, previewHeight: 0.14 };
-        case 'graphic':
-          return { previewX: 0.2, previewY: 0.68, previewWidth: 0.6, previewHeight: 0.18 };
-        default:
-          return getDefaultRoleLayout(role, aspectRatio, 0);
-      }
-    case 'poster':
-      switch (role) {
-        case 'label':
-          return { previewX: 0.12, previewY: 0.1, previewWidth: 0.24, previewHeight: 0.05 };
-        case 'title':
-          return { previewX: 0.12, previewY: 0.2, previewWidth: 0.68, previewHeight: 0.18 };
-        case 'accent':
-          return { previewX: 0.12, previewY: 0.4, previewWidth: 0.18, previewHeight: 0.012 };
-        case 'body':
-          return { previewX: 0.12, previewY: 0.46, previewWidth: 0.5, previewHeight: 0.1 };
-        case 'list':
-          return { previewX: 0.12, previewY: 0.6, previewWidth: 0.34, previewHeight: 0.14 };
-        case 'graphic':
-          return { previewX: 0.64, previewY: 0.42, previewWidth: 0.2, previewHeight: 0.28 };
-        default:
-          return getDefaultRoleLayout(role, aspectRatio, 0);
-      }
-    case 'center-focus':
-      switch (role) {
-        case 'label':
-          return { previewX: 0.37, previewY: 0.08, previewWidth: 0.26, previewHeight: 0.05 };
-        case 'title':
-          return { previewX: 0.22, previewY: 0.18, previewWidth: 0.56, previewHeight: 0.16 };
-        case 'accent':
-          return { previewX: 0.43, previewY: 0.36, previewWidth: 0.14, previewHeight: 0.012 };
-        case 'body':
-          return { previewX: 0.25, previewY: 0.42, previewWidth: 0.5, previewHeight: 0.09 };
-        case 'list':
-          return { previewX: 0.27, previewY: 0.55, previewWidth: 0.46, previewHeight: 0.14 };
-        case 'graphic':
-          return { previewX: 0.34, previewY: 0.72, previewWidth: 0.32, previewHeight: 0.14 };
-        default:
-          return getDefaultRoleLayout(role, aspectRatio, 0);
-      }
-    case 'split-left':
-    default:
-      return getDefaultRoleLayout(role, aspectRatio, 0);
-  }
-};
-
-const getSceneTextAlign = (layoutVariant: SceneLayoutVariant): 'left' | 'center' => {
-  if (layoutVariant === 'center-focus') {
-    return 'center';
-  }
-
-  return 'left';
-};
-
-const getLayoutSummary = (layoutVariant: SceneLayoutVariant, isRussian: boolean) => {
-  switch (layoutVariant) {
-    case 'split-right':
-      return isRussian ? '??????? ?????, ????? ??????' : 'graphic on the left, text on the right';
-    case 'stacked':
-      return isRussian ? '???????????? ????: ????? ??????, ??????? ????' : 'stacked frame: text above, visual below';
-    case 'poster':
-      return isRussian ? 'poster-like ???? ? ??????? ?????????? ? ????????? ????????' : 'poster-like frame with a large headline and separate accent';
-    case 'center-focus':
-      return isRussian ? '?????????????? ?????????? ? ??????? ?? ????? ??????' : 'centered composition focused on one key idea';
-    case 'split-left':
-    default:
-      return isRussian ? '????? ?????, ??????? ??????' : 'text on the left, graphic on the right';
-  }
-};
-
-const createSceneLabel = (index: number, isRussian: boolean) => {
-  const labels = isRussian
-    ? ['??????', '????', '????????', '????????', '?????']
-    : ['HOOK', 'BASE', 'MECHANICS', 'SCENARIO', 'TAKEAWAY'];
-  return labels[index] ?? (isRussian ? '?????' : 'SCENE');
-};
-
-const getDefaultRoleLayout = (
-  role: SceneRole,
-  aspectRatio: number,
-  sceneIndex: number,
-): { previewX: number; previewY: number; previewWidth: number; previewHeight: number } => {
-  if (role === 'background') {
-    return { previewX: 0, previewY: 0, previewWidth: 1, previewHeight: 1 };
-  }
-
-  if (role === 'subtitle') {
-    return aspectRatio < 1
-      ? { previewX: 0.08, previewY: 0.84, previewWidth: 0.84, previewHeight: 0.1 }
-      : { previewX: 0.1, previewY: 0.82, previewWidth: 0.8, previewHeight: 0.1 };
-  }
-
-  if (aspectRatio < 0.85) {
-    switch (role) {
-      case 'label':
-        return { previewX: 0.1, previewY: 0.08, previewWidth: 0.28, previewHeight: 0.05 };
-      case 'title':
-        return { previewX: 0.1, previewY: 0.16, previewWidth: 0.8, previewHeight: 0.13 };
-      case 'accent':
-        return { previewX: 0.1, previewY: 0.31, previewWidth: 0.18, previewHeight: 0.012 };
-      case 'body':
-        return { previewX: 0.1, previewY: 0.35, previewWidth: 0.8, previewHeight: 0.11 };
-      case 'list':
-        return { previewX: 0.1, previewY: 0.5, previewWidth: 0.8, previewHeight: 0.16 };
-      case 'graphic':
-        return sceneIndex % 2 === 0
-          ? { previewX: 0.16, previewY: 0.7, previewWidth: 0.68, previewHeight: 0.18 }
-          : { previewX: 0.12, previewY: 0.68, previewWidth: 0.76, previewHeight: 0.2 };
-      default:
-        return { previewX: 0.12, previewY: 0.22, previewWidth: 0.76, previewHeight: 0.18 };
-    }
-  }
-
-  if (aspectRatio <= 1.15) {
-    switch (role) {
-      case 'label':
-        return { previewX: 0.1, previewY: 0.08, previewWidth: 0.22, previewHeight: 0.05 };
-      case 'title':
-        return { previewX: 0.1, previewY: 0.16, previewWidth: 0.74, previewHeight: 0.14 };
-      case 'accent':
-        return { previewX: 0.1, previewY: 0.32, previewWidth: 0.16, previewHeight: 0.012 };
-      case 'body':
-        return { previewX: 0.1, previewY: 0.36, previewWidth: 0.74, previewHeight: 0.11 };
-      case 'list':
-        return { previewX: 0.1, previewY: 0.52, previewWidth: 0.42, previewHeight: 0.18 };
-      case 'graphic':
-        return { previewX: 0.56, previewY: 0.5, previewWidth: 0.28, previewHeight: 0.28 };
-      default:
-        return { previewX: 0.14, previewY: 0.24, previewWidth: 0.72, previewHeight: 0.18 };
-    }
-  }
-
-  switch (role) {
-    case 'label':
-      return { previewX: 0.08, previewY: 0.1, previewWidth: 0.18, previewHeight: 0.05 };
-    case 'title':
-      return { previewX: 0.08, previewY: 0.17, previewWidth: 0.46, previewHeight: 0.15 };
-    case 'accent':
-      return { previewX: 0.08, previewY: 0.34, previewWidth: 0.14, previewHeight: 0.012 };
-    case 'body':
-      return { previewX: 0.08, previewY: 0.38, previewWidth: 0.36, previewHeight: 0.11 };
-    case 'list':
-      return { previewX: 0.08, previewY: 0.54, previewWidth: 0.34, previewHeight: 0.18 };
-    case 'graphic':
-      return sceneIndex % 2 === 0
-        ? { previewX: 0.62, previewY: 0.16, previewWidth: 0.24, previewHeight: 0.56 }
-        : { previewX: 0.58, previewY: 0.2, previewWidth: 0.28, previewHeight: 0.48 };
-    default:
-      return { previewX: 0.14, previewY: 0.24, previewWidth: 0.72, previewHeight: 0.18 };
-  }
-};
-
 const deriveDisplayTextFromLabel = (
   clipName: string,
   trackType: TimelineTrackType,
   elementPreset?: string | null,
 ) => {
-  if (trackType === 'audio') {
+  if (trackType === "audio") {
     return null;
   }
 
-  const explicitMatch = /^(?:hero title|section title|topic header|subtitle|description|body text|quote block|lower third pro|callout bubble)\s*:\s*(.+)$/i.exec(
-    clipName.trim(),
-  );
+  const explicitMatch =
+    /^(?:hero title|section title|topic header|subtitle|description|body text|quote block|lower third pro|callout bubble|scene title|section title)\s*:\s*(.+)$/i.exec(
+      clipName.trim(),
+    );
   if (explicitMatch?.[1]) {
     return sanitizeNullableText(explicitMatch[1]);
   }
 
   const descriptor = sanitizeText(elementPreset ?? clipName, clipName).toLowerCase();
-  if (trackType === 'subtitle' || isTitleDescriptor(descriptor) || isBodyDescriptor(descriptor)) {
-    return sanitizeNullableText(clipName.replace(/\s*\(h\d\)/i, ''));
+  if (trackType === "subtitle" || isTitleDescriptor(descriptor) || isBodyDescriptor(descriptor)) {
+    return sanitizeNullableText(clipName.replace(/\s*\(h\d\)/i, ""));
   }
 
   return null;
 };
 
 const deriveNarrationTextFromLabel = (clipName: string, trackType: TimelineTrackType) => {
-  if (trackType !== 'audio') {
+  if (trackType !== "audio") {
     return null;
   }
 
-  const narrationMatch = /^(?:narration|voiceover|озвучка|диктор)\s*:\s*(.+)$/i.exec(clipName.trim());
+  const narrationMatch = /^(?:narration|voiceover|РѕР·РІСѓС‡РєР°|РґРёРєС‚РѕСЂ)\s*:\s*(.+)$/i.exec(clipName.trim());
   return narrationMatch?.[1] ? sanitizeNullableText(narrationMatch[1]) : null;
 };
 
@@ -669,9 +257,21 @@ const normalizeClipContent = ({
     designIntent: sanitizeNullableText(content?.designIntent),
   };
 
-  return Object.values(normalizedContent).some((value) => typeof value === 'string')
+  return Object.values(normalizedContent).some((value) => typeof value === "string")
     ? normalizedContent
     : undefined;
+};
+
+const normalizeNullableNumber = (
+  value: number | null | undefined,
+  min: number,
+  max: number,
+) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return clamp(value, min, max);
 };
 
 const normalizeElementStyle = (style?: EditingSchemaElementStyle | null) => {
@@ -684,18 +284,27 @@ const normalizeElementStyle = (style?: EditingSchemaElementStyle | null) => {
     accentColor: sanitizeNullableText(style.accentColor),
     textColor: sanitizeNullableText(style.textColor),
     strokeColor: sanitizeNullableText(style.strokeColor),
+    strokeWidthPx: normalizeNullableNumber(style.strokeWidthPx, 0, 24),
     backgroundColor: sanitizeNullableText(style.backgroundColor),
-    backgroundOpacity:
-      typeof style.backgroundOpacity === 'number' ? clamp(style.backgroundOpacity, 0, 1) : null,
-    borderRadiusPx:
-      typeof style.borderRadiusPx === 'number' ? clamp(style.borderRadiusPx, 0, 64) : null,
+    backgroundOpacity: normalizeNullableNumber(style.backgroundOpacity, 0, 1),
+    opacity: normalizeNullableNumber(style.opacity, 0, 1),
+    borderRadiusPx: normalizeNullableNumber(style.borderRadiusPx, 0, 128),
     textAlign:
-      style.textAlign === 'left' || style.textAlign === 'center' || style.textAlign === 'right'
+      style.textAlign === "left" || style.textAlign === "center" || style.textAlign === "right"
         ? style.textAlign
         : null,
+    fontFamily: sanitizeNullableText(style.fontFamily),
+    fontSizePx: normalizeNullableNumber(style.fontSizePx, 8, 240),
+    fontWeight: normalizeNullableNumber(style.fontWeight, 100, 900),
+    lineHeight: normalizeNullableNumber(style.lineHeight, 0.8, 3),
+    letterSpacingEm: normalizeNullableNumber(style.letterSpacingEm, -0.2, 0.5),
+    paddingXPx: normalizeNullableNumber(style.paddingXPx, 0, 160),
+    paddingYPx: normalizeNullableNumber(style.paddingYPx, 0, 160),
   };
 
-  return Object.values(normalizedStyle).some((value) => value !== null) ? normalizedStyle : undefined;
+  return Object.values(normalizedStyle).some((value) => value !== null && value !== undefined)
+    ? normalizedStyle
+    : undefined;
 };
 
 const detectSceneRole = ({
@@ -709,40 +318,85 @@ const detectSceneRole = ({
   elementPreset: string | null;
   displayText?: string | null;
 }): SceneRole => {
-  if (trackType === 'subtitle') {
-    return 'subtitle';
+  if (trackType === "subtitle") {
+    return "subtitle";
   }
 
   const descriptor = sanitizeText(elementPreset ?? clipName, clipName).toLowerCase();
   if (isBackgroundDescriptor(descriptor)) {
-    return 'background';
+    return "background";
   }
 
-  if (descriptor.includes('topic header') || descriptor.includes('label') || descriptor.includes('kicker')) {
-    return 'label';
+  if (descriptor.includes("topic header") || descriptor.includes("label") || descriptor.includes("kicker")) {
+    return "label";
   }
 
   if (isTitleDescriptor(descriptor)) {
-    return descriptor.includes('topic header') ? 'label' : 'title';
+    return descriptor.includes("topic header") ? "label" : "title";
   }
 
   if (isListText(displayText)) {
-    return 'list';
+    return "list";
   }
 
-  if (descriptor.includes('line accent') || descriptor.includes('line')) {
-    return 'accent';
+  if (descriptor.includes("line accent") || descriptor.includes("line")) {
+    return "accent";
   }
 
   if (isBodyDescriptor(descriptor)) {
-    return 'body';
+    return "body";
   }
 
   if (isGraphicDescriptor(descriptor)) {
-    return descriptor.includes('line accent') ? 'accent' : 'graphic';
+    return descriptor.includes("line accent") ? "accent" : "graphic";
   }
 
-  return displayText ? 'body' : 'graphic';
+  return displayText ? "body" : "graphic";
+};
+
+const applyAspectRatioLayoutGuardrails = ({
+  previewX,
+  previewY,
+  previewWidth,
+  previewHeight,
+  role,
+  aspectRatio,
+}: {
+  previewX: number;
+  previewY: number;
+  previewWidth: number;
+  previewHeight: number;
+  role: SceneRole;
+  aspectRatio: number;
+}) => {
+  if (role === "background" || role === "subtitle" || role === "accent") {
+    return { previewX, previewY, previewWidth, previewHeight };
+  }
+
+  if (aspectRatio >= 1.3) {
+    const rightEdge = previewX + previewWidth;
+    const looksLikeNarrowCenteredCard = previewWidth <= 0.62 && previewX >= 0.18 && rightEdge <= 0.82;
+
+    if (looksLikeNarrowCenteredCard) {
+      if (role === "title") {
+        return { previewX: 0.12, previewY, previewWidth: 0.76, previewHeight: Math.max(previewHeight, 0.16) };
+      }
+
+      if (role === "body") {
+        return { previewX: 0.14, previewY, previewWidth: 0.72, previewHeight: Math.max(previewHeight, 0.11) };
+      }
+
+      if (role === "list") {
+        return { previewX: 0.14, previewY, previewWidth: 0.72, previewHeight: Math.max(previewHeight, 0.16) };
+      }
+
+      if (role === "graphic") {
+        return { previewX: 0.18, previewY, previewWidth: 0.64, previewHeight: Math.max(previewHeight, 0.18) };
+      }
+    }
+  }
+
+  return { previewX, previewY, previewWidth, previewHeight };
 };
 
 const normalizeClip = ({
@@ -751,7 +405,7 @@ const normalizeClip = ({
   trackType,
   sequenceDurationFrames,
   assets,
-  userMessage,
+  analysis,
   aspectRatio,
 }: {
   clip: EditingSchemaClip;
@@ -759,17 +413,17 @@ const normalizeClip = ({
   trackType: TimelineTrackType;
   sequenceDurationFrames: number;
   assets: AiEditorAssetContext[];
-  userMessage: string;
+  analysis: RequestAnalysis;
   aspectRatio: number;
 }): EditingSchemaClip => {
   const safeDuration = clamp(Math.round(clip.durationFrames), 1, sequenceDurationFrames);
   const safeStart = clamp(Math.round(clip.startFrame), 0, Math.max(sequenceDurationFrames - safeDuration, 0));
   const fallbackName =
-    trackType === 'subtitle'
-      ? 'Subtitle ' + String(clipIndex + 1)
-      : trackType === 'audio'
-        ? 'Narration ' + String(clipIndex + 1)
-        : 'Scene ' + String(clipIndex + 1);
+    trackType === "subtitle"
+      ? `Subtitle ${clipIndex + 1}`
+      : trackType === "audio"
+        ? `Narration ${clipIndex + 1}`
+        : `Scene ${clipIndex + 1}`;
 
   const elementPreset = resolveElementPreset(clip);
   const normalizedContent = normalizeClipContent({ clip, trackType, elementPreset });
@@ -779,62 +433,76 @@ const normalizeClip = ({
     elementPreset,
     displayText: normalizedContent?.displayText,
   });
+
   const defaultLayout =
-    clip.source === 'asset' && clip.mediaUrl
+    clip.source === "asset" && clip.mediaUrl
       ? { previewX: 0, previewY: 0, previewWidth: 1, previewHeight: 1 }
-      : getDefaultRoleLayout(role, aspectRatio, clipIndex);
+      : {
+          previewX: role === "background" ? 0 : aspectRatio < 1 ? 0.1 : 0.08,
+          previewY: role === "background" ? 0 : aspectRatio < 1 ? 0.12 : 0.16,
+          previewWidth: role === "background" ? 1 : aspectRatio < 1 ? 0.8 : 0.72,
+          previewHeight: role === "background" ? 1 : aspectRatio < 1 ? 0.16 : 0.18,
+        };
 
   const hasExplicitLayout =
-    typeof clip.previewX === 'number' &&
-    typeof clip.previewY === 'number' &&
-    typeof clip.previewWidth === 'number' &&
-    typeof clip.previewHeight === 'number';
+    typeof clip.previewX === "number" &&
+    typeof clip.previewY === "number" &&
+    typeof clip.previewWidth === "number" &&
+    typeof clip.previewHeight === "number";
 
   let previewX = hasExplicitLayout ? clip.previewX ?? defaultLayout.previewX : defaultLayout.previewX;
   let previewY = hasExplicitLayout ? clip.previewY ?? defaultLayout.previewY : defaultLayout.previewY;
   let previewWidth = hasExplicitLayout ? clip.previewWidth ?? defaultLayout.previewWidth : defaultLayout.previewWidth;
   let previewHeight = hasExplicitLayout ? clip.previewHeight ?? defaultLayout.previewHeight : defaultLayout.previewHeight;
 
-  if (role === 'background') {
+  if (role === "background") {
     previewX = 0;
     previewY = 0;
     previewWidth = 1;
     previewHeight = 1;
   }
 
-  const theme = getFallbackTheme(userMessage);
+  ({ previewX, previewY, previewWidth, previewHeight } = applyAspectRatioLayoutGuardrails({
+    previewX,
+    previewY,
+    previewWidth,
+    previewHeight,
+    role,
+    aspectRatio,
+  }));
+
   const normalizedElementStyle = normalizeElementStyle(clip.elementStyle);
   let resolvedElementStyle: EditingSchemaElementStyle | undefined = normalizedElementStyle
     ? { ...normalizedElementStyle }
     : undefined;
 
-  if (clip.source === 'element') {
+  if (clip.source === "element") {
     resolvedElementStyle ??= {};
 
-    if (role === 'title' || role === 'body' || role === 'list' || role === 'label') {
-      resolvedElementStyle.textAlign ??= trackType === 'subtitle' ? 'center' : 'left';
-      resolvedElementStyle.textColor ??= theme.textColor;
+    if (role === "title" || role === "body" || role === "list" || role === "label") {
+      resolvedElementStyle.textAlign ??= trackType === "subtitle" ? "center" : "left";
+      resolvedElementStyle.textColor ??= analysis.theme.textColor;
     }
 
-    if (role === 'background') {
-      resolvedElementStyle.backgroundColor ??= theme.backgroundColor;
-      resolvedElementStyle.fillColor ??= theme.backgroundColor;
+    if (role === "background") {
+      resolvedElementStyle.backgroundColor ??= analysis.theme.backgroundColor;
+      resolvedElementStyle.fillColor ??= analysis.theme.backgroundColor;
     }
 
-    if (role === 'graphic') {
-      resolvedElementStyle.fillColor ??= theme.surfaceColor;
-      resolvedElementStyle.accentColor ??= theme.accentColor;
-      resolvedElementStyle.borderRadiusPx ??= elementPreset === 'Split Screen' ? 28 : 24;
+    if (role === "graphic") {
+      resolvedElementStyle.fillColor ??= analysis.theme.surfaceColor;
+      resolvedElementStyle.accentColor ??= analysis.theme.accentColor;
+      resolvedElementStyle.borderRadiusPx ??= elementPreset === "Split Screen" ? 28 : 24;
     }
 
-    if (role === 'accent') {
-      resolvedElementStyle.fillColor ??= theme.lineColor;
-      resolvedElementStyle.backgroundColor ??= theme.lineColor;
+    if (role === "accent") {
+      resolvedElementStyle.fillColor ??= analysis.theme.lineColor;
+      resolvedElementStyle.backgroundColor ??= analysis.theme.lineColor;
       resolvedElementStyle.borderRadiusPx ??= 999;
     }
 
-    if (trackType === 'subtitle') {
-      resolvedElementStyle.textAlign ??= 'center';
+    if (trackType === "subtitle") {
+      resolvedElementStyle.textAlign ??= "center";
     }
 
     if (!Object.values(resolvedElementStyle).some((value) => value !== null && value !== undefined)) {
@@ -852,34 +520,29 @@ const normalizeClip = ({
     previewY: clamp(previewY, 0, 1),
     previewWidth: clamp(previewWidth, 0.08, 1),
     previewHeight: clamp(previewHeight, 0.08, 1),
-    subtitleOutlineWidth:
-      clip.subtitleOutlineWidth === null ? null : clamp(clip.subtitleOutlineWidth, 0, 12),
-    subtitleBackgroundOpacity:
-      clip.subtitleBackgroundOpacity === null ? null : clamp(clip.subtitleBackgroundOpacity, 0, 1),
+    subtitleOutlineWidth: normalizeNullableNumber(clip.subtitleOutlineWidth, 0, 12),
+    subtitleBackgroundOpacity: normalizeNullableNumber(clip.subtitleBackgroundOpacity, 0, 1),
     subtitleFontWeight:
-      clip.subtitleFontWeight === null
+      clip.subtitleFontWeight == null
         ? null
         : clamp(Math.round(clip.subtitleFontWeight / 100) * 100, 100, 900),
-    subtitleFontSizePx: clip.subtitleFontSizePx === null ? null : clamp(clip.subtitleFontSizePx, 10, 96),
-    subtitleBorderRadiusPx:
-      clip.subtitleBorderRadiusPx === null ? null : clamp(clip.subtitleBorderRadiusPx, 0, 64),
-    subtitlePaddingXPx:
-      clip.subtitlePaddingXPx === null ? null : clamp(clip.subtitlePaddingXPx, 0, 64),
-    subtitlePaddingYPx:
-      clip.subtitlePaddingYPx === null ? null : clamp(clip.subtitlePaddingYPx, 0, 64),
+    subtitleFontSizePx: normalizeNullableNumber(clip.subtitleFontSizePx, 10, 96),
+    subtitleBorderRadiusPx: normalizeNullableNumber(clip.subtitleBorderRadiusPx, 0, 64),
+    subtitlePaddingXPx: normalizeNullableNumber(clip.subtitlePaddingXPx, 0, 64),
+    subtitlePaddingYPx: normalizeNullableNumber(clip.subtitlePaddingYPx, 0, 64),
     elementPreset,
     content: normalizedContent,
     elementStyle: resolvedElementStyle,
   };
 };
 
-const hasTrackEdits = (schema: Pick<EditingSchema, 'tracks'>) =>
+const hasTrackEdits = (schema: Pick<EditingSchema, "tracks">) =>
   schema.tracks.some((track) => track.clips.length > 0);
 
 const clipHasNarrativePayload = (
-  clip: Pick<EditingSchemaClip, 'content' | 'source' | 'elementPreset'>,
+  clip: Pick<EditingSchemaClip, "content" | "source" | "elementPreset">,
 ) => {
-  if (clip.source === 'asset') {
+  if (clip.source === "asset") {
     return true;
   }
 
@@ -892,7 +555,10 @@ const clipHasNarrativePayload = (
 };
 
 const isFullFrameBackgroundClip = (
-  clip: Pick<EditingSchemaClip, 'previewX' | 'previewY' | 'previewWidth' | 'previewHeight' | 'content' | 'source' | 'elementPreset'>,
+  clip: Pick<
+    EditingSchemaClip,
+    "previewX" | "previewY" | "previewWidth" | "previewHeight" | "content" | "source" | "elementPreset"
+  >,
 ) => {
   const previewX = clip.previewX ?? 0;
   const previewY = clip.previewY ?? 0;
@@ -914,7 +580,15 @@ const countNarrativeScenes = (
     clips: Array<
       Pick<
         EditingSchemaClip,
-        'startFrame' | 'durationFrames' | 'previewX' | 'previewY' | 'previewWidth' | 'previewHeight' | 'content' | 'source' | 'elementPreset'
+        | "startFrame"
+        | "durationFrames"
+        | "previewX"
+        | "previewY"
+        | "previewWidth"
+        | "previewHeight"
+        | "content"
+        | "source"
+        | "elementPreset"
       >
     >;
   }>,
@@ -922,7 +596,7 @@ const countNarrativeScenes = (
   const sceneAnchors = new Set<number>();
 
   tracks.forEach((track) => {
-    if (track.type !== 'video') {
+    if (track.type !== "video") {
       return;
     }
 
@@ -938,442 +612,27 @@ const countNarrativeScenes = (
   return sceneAnchors.size;
 };
 
-const buildSceneSpans = (durationFrames: number, count: number) => {
-  const spans: Array<{ startFrame: number; durationFrames: number }> = [];
-  let cursor = 0;
-
-  for (let index = 0; index < count; index += 1) {
-    const remainingScenes = count - index;
-    const remainingFrames = durationFrames - cursor;
-    const sceneDuration =
-      index === count - 1
-        ? remainingFrames
-        : Math.max(Math.round(remainingFrames / remainingScenes), STARTER_SCENE_MIN_DURATION_FRAMES);
-
-    spans.push({
-      startFrame: cursor,
-      durationFrames: Math.max(sceneDuration, 1),
-    });
-    cursor += sceneDuration;
-  }
-
-  return spans;
-};
-
-const createElementClip = ({
-  name,
-  startFrame,
-  durationFrames,
-  elementPreset,
-  previewX,
-  previewY,
-  previewWidth,
-  previewHeight,
-  displayText,
-  narrationText,
-  designIntent,
-  fillColor,
-  accentColor,
-  textColor,
-  backgroundColor,
-  borderRadiusPx,
-  textAlign,
-}: {
-  name: string;
-  startFrame: number;
-  durationFrames: number;
-  elementPreset: string;
-  previewX: number;
-  previewY: number;
-  previewWidth: number;
-  previewHeight: number;
-  displayText?: string | null;
-  narrationText?: string | null;
-  designIntent?: string | null;
-  fillColor?: string | null;
-  accentColor?: string | null;
-  textColor?: string | null;
-  backgroundColor?: string | null;
-  borderRadiusPx?: number | null;
-  textAlign?: 'left' | 'center' | 'right' | null;
-}): EditingSchemaClip => ({
-  name,
-  startFrame,
-  durationFrames,
-  source: 'element',
-  mediaUrl: null,
-  previewX,
-  previewY,
-  previewWidth,
-  previewHeight,
-  subtitleTextColor: null,
-  subtitleOutlineColor: null,
-  subtitleOutlineWidth: null,
-  subtitleBackgroundColor: null,
-  subtitleBackgroundOpacity: null,
-  subtitleFontWeight: null,
-  subtitleFontSizePx: null,
-  subtitleBorderRadiusPx: null,
-  subtitlePaddingXPx: null,
-  subtitlePaddingYPx: null,
-  elementPreset,
-  content:
-    displayText || narrationText || designIntent
-      ? {
-          displayText: displayText ?? null,
-          narrationText: narrationText ?? null,
-          designIntent: designIntent ?? null,
-        }
-      : undefined,
-  elementStyle:
-    fillColor || accentColor || textColor || backgroundColor || borderRadiusPx || textAlign
-      ? {
-          fillColor: fillColor ?? null,
-          accentColor: accentColor ?? null,
-          textColor: textColor ?? null,
-          strokeColor: null,
-          backgroundColor: backgroundColor ?? null,
-          backgroundOpacity: null,
-          borderRadiusPx: borderRadiusPx ?? null,
-          textAlign: textAlign ?? null,
-        }
-      : undefined,
-});
-
-const buildStoryboardScenes = (topic: string, userMessage: string, isRussian: boolean): StoryboardScene[] => {
-  const backgroundSummary = getBackgroundSummary(userMessage, isRussian);
-  const normalizedTopic = sanitizeText(topic, isRussian ? '????' : 'the topic');
-  const aspectLabel = getAspectRatioLabel(inferRequestedAspectRatio(userMessage) ?? DEFAULT_VIEWPORT_ASPECT_RATIO);
-
-  if (isRussian) {
-    return [
-      {
-        label: createSceneLabel(0, true),
-        title: normalizedTopic,
-        body: '???????? ???? ? ????: ??? ??? ? ?????? ? ??? ????? ????????????? ?????? ??????.',
-        list: ['??? ???', '?????? ?????', '??? ???????? ??????'],
-        narration: '????????? ???? ' + normalizedTopic + ' ???????? ? ???????? ???????, ????? ??????? ????? ????? ????????.',
-        accentPreset: 'Solid Rectangle',
-        designIntent: '??????????? ????? ? ??????? ' + aspectLabel + ' ?? ???? ' + backgroundSummary + ' ? ??????? ????????? ? ?????? ???????.',
-        motionNote: '??????? ????????? ?????? ????????, ????????? ????? ?????????? ?? ????????, ??????????? ???? ???????????? ???? ??? ?????????.',
-        layoutVariant: 'poster',
-        visual: '??????????? ???????? ?????? ???? ??? ??????? ?????????????? ????????',
-      },
-      {
-        label: createSceneLabel(1, true),
-        title: '??? ??? ?????',
-        body: '???? ??????? ??????????? ? ??????? ?????? ???????????? ? ??????? ??????.',
-        list: ['??????? ??????????', '??????? ???????', '???? ????? ? ??????'],
-        narration: '?? ?????? ????? ?????????, ??? ????? ' + normalizedTopic + ', ??? ????????????????? ?????????? ? ??? ????? ??????.',
-        accentPreset: 'Circle Pulse',
-        designIntent: '?????-??????????? ? ????? ??????? ???????, ???????? ???????????? ? ????????? ?????????? ??????.',
-        motionNote: '??????? ?????????? ?????, ????? ???????? ?????, ????? ????? ???????????? ??????????? ??????.',
-        layoutVariant: 'split-left',
-        visual: '?????????????? ????? ??? ???????????????? ???????????',
-      },
-      {
-        label: createSceneLabel(2, true),
-        title: '??? ??? ????????',
-        body: '????????? ???????? ?? ???????? ????, ????? ?????? ????? ???? ??????? ? ?????? ???????.',
-        list: ['??? 1', '??? 2', '??? 3'],
-        narration: '?????? ??????????, ??? ??????? ' + normalizedTopic + ', ??????????? ??????? ?? ????????? ???????? ?????.',
-        accentPreset: 'Triangle Marker',
-        designIntent: '??????????? ????? ? ??????, ????????? ?????? ? ???????? ??????????? ???????.',
-        motionNote: '????????? ????? ?????????? ??????, ????? ???? ?????????? ?? ???????, ? ??????? ?????????? ?????? ?? ?????.',
-        layoutVariant: 'stacked',
-        visual: '????????? ????????? ??? ????????? ????? ????????',
-      },
-      {
-        label: createSceneLabel(3, true),
-        title: '??? ??? ???????? ?? ????????',
-        body: '????????? ???? ?? ?????????? ? ???????? ????????, ????????? ??? ???????????????? ????.',
-        list: ['????????', '??? ??????????', '?????? ??? ???????'],
-        narration: '????? ????????? ' + normalizedTopic + ' ? ?????????, ????? ?????????? ????? ?? ?????????????, ? ?????????.',
-        accentPreset: 'Split Screen',
-        designIntent: '?????-???????? ? ?????????? ???? ?????? ? ????????? ????????? ??????????, ???? ???? ???? ??? ???????? ????????.',
-        motionNote: '?????????? ?????????? ??? split scene: ???? ???? ?????? ????????, ?????? ?????????? ????????? ??? ?????????.',
-        layoutVariant: 'split-right',
-        visual: '????????? ???? ????????? ??? split-screen ???????????',
-      },
-      {
-        label: createSceneLabel(4, true),
-        title: '??? ????? ?????????',
-        body: '????? ???????? ???? ??????? ????? ? ????????? ??????? ?????? ????? ?????? ????????? ??????????.',
-        list: ['??????? ?????', '?????? ??????', '???????? ?????'],
-        narration: '????????? ????? ?????????? ???? ' + normalizedTopic + ' ? ????????? ??????? ????? takeaway.',
-        accentPreset: 'Arrow Swipe',
-        designIntent: '????????? ???? ? ????? ???????????, ?????? ????????? ? ???????????? ????????? ? ??????.',
-        motionNote: '????????? ????? ?????????? ????????, ?????????????? ?????? ??????????? ?????? ? ????????, ??? ????????? ?????????.',
-        layoutVariant: 'center-focus',
-        visual: '????????? ????????? ???? ??? ??????????? directional graphic',
-      },
-    ];
-  }
-
-  return [
-    {
-      label: createSceneLabel(0, false),
-      title: normalizedTopic,
-      body: 'Open with what the topic is and why it deserves attention before the explanation gets more detailed.',
-      list: ['what it is', 'why it matters', 'what comes next'],
-      narration: 'Open the piece by framing ' + normalizedTopic + ' clearly so the viewer understands the context right away.',
-      accentPreset: 'Solid Rectangle',
-      designIntent: 'Opening scene in ' + aspectLabel + ' with ' + backgroundSummary + ' and a strong editorial hierarchy.',
-      motionNote: 'The title lands first, support copy follows in sequence, and the visual block establishes the topic without feeling generic.',
-      layoutVariant: 'poster',
-      visual: 'large thematic symbol or geometric metaphor',
-    },
-    {
-      label: createSceneLabel(1, false),
-      title: 'What it is',
-      body: 'Define the idea in plain language and keep only one or two essential points on screen.',
-      list: ['simple definition', 'core principle', 'one key takeaway'],
-      narration: 'Give a clean definition of ' + normalizedTopic + ' without overloading the frame with too much text.',
-      accentPreset: 'Circle Pulse',
-      designIntent: 'Definition scene with one clear thesis, measured typography, and a visual support element that does real communicative work.',
-      motionNote: 'The kicker fades in first, the main thesis follows, and the graphic accent appears softly without a jump.',
-      layoutVariant: 'split-left',
-      visual: 'iconographic or conceptual placeholder visual',
-    },
-    {
-      label: createSceneLabel(2, false),
-      title: 'How it works',
-      body: 'Break the mechanism into short readable beats so the viewer can track the logic at a glance.',
-      list: ['step 1', 'step 2', 'step 3'],
-      narration: 'Walk through how ' + normalizedTopic + ' works by turning the process into short visual steps.',
-      accentPreset: 'Triangle Marker',
-      designIntent: 'Mechanics scene built like a readable process diagram instead of a dense paragraph.',
-      motionNote: 'The process marker enters first, each step appears in order, and the visual cue moves the eye through the sequence.',
-      layoutVariant: 'stacked',
-      visual: 'modular process diagram or directional step flow',
-    },
-    {
-      label: createSceneLabel(3, false),
-      title: 'How it looks in practice',
-      body: 'Ground the idea in a scenario, comparison, or realistic use case so it stops feeling abstract.',
-      list: ['situation', 'what changes', 'why it helps'],
-      narration: 'Translate ' + normalizedTopic + ' into a practical example or comparison that feels concrete.',
-      accentPreset: 'Split Screen',
-      designIntent: 'Application scene with contrast between two states or viewpoints, even if only geometric placeholders are available.',
-      motionNote: 'The frame assembles as a clean split scene, letting the viewer compare one side against the other.',
-      layoutVariant: 'split-right',
-      visual: 'two panel comparison or split-screen placeholder',
-    },
-    {
-      label: createSceneLabel(4, false),
-      title: 'What to remember',
-      body: 'Close on one strong takeaway so the video ends with clarity instead of another information dump.',
-      list: ['main idea', 'common mistake', 'final takeaway'],
-      narration: 'Wrap up ' + normalizedTopic + ' by restating the core takeaway and the one idea worth remembering.',
-      accentPreset: 'Arrow Swipe',
-      designIntent: 'Closing scene centered around one clear takeaway and a decisive visual accent.',
-      motionNote: 'The final statement appears with confidence, secondary points settle quickly, and the accent closes the scene cleanly.',
-      layoutVariant: 'center-focus',
-      visual: 'final directional accent or closing symbol',
-    },
-  ];
-};
-
-const createStarterMontageTracks = ({
-  durationFrames,
-  userMessage,
-  aspectRatio,
-}: {
-  durationFrames: number;
-  userMessage: string;
-  aspectRatio: number;
-}): EditingSchema['tracks'] => {
-  const isRussian = prefersRussian(userMessage);
-  const topic = deriveTopicTitle(userMessage);
-  const scenes = buildStoryboardScenes(topic, userMessage, isRussian);
-  const sceneSpans = buildSceneSpans(durationFrames, scenes.length);
-  const theme = getFallbackTheme(userMessage);
-
-  const backgroundClip = createElementClip({
-    name: theme.backgroundPreset,
-    elementPreset: theme.backgroundPreset,
-    startFrame: 0,
-    durationFrames,
-    previewX: 0,
-    previewY: 0,
-    previewWidth: 1,
-    previewHeight: 1,
-    displayText: null,
-    designIntent: isRussian ? 'Полноэкранный фон для сгенерированного видео.' : 'Full frame background for the generated video.',
-    backgroundColor: theme.backgroundColor,
-  });
-
-  const buildLayerClips = (
-    role: SceneRole,
-    offsetFrames: number,
-    makeClip: (scene: StoryboardScene, index: number, startFrame: number, durationFrames: number) => EditingSchemaClip,
-  ) =>
-    scenes.map((scene, index) => {
-      const span = sceneSpans[index]!;
-      return makeClip(scene, index, span.startFrame + offsetFrames, Math.max(span.durationFrames - offsetFrames - 6, 18));
-    });
-
-  const lineClips = buildLayerClips('accent', 12, (scene, index, startFrame, durationFrames) => {
-    const layout = getRoleLayoutForVariant('accent', aspectRatio, scene.layoutVariant);
-    return createElementClip({
-      name: 'Accent Line ' + String(index + 1),
-      elementPreset: 'Line Accent',
-      startFrame,
-      durationFrames,
-      previewX: layout.previewX,
-      previewY: layout.previewY,
-      previewWidth: layout.previewWidth,
-      previewHeight: layout.previewHeight,
-      designIntent: scene.designIntent + ' ' + scene.motionNote,
-      fillColor: theme.lineColor,
-      backgroundColor: theme.lineColor,
-      borderRadiusPx: 999,
-    });
-  });
-
-  const labelClips = buildLayerClips('label', 4, (scene, index, startFrame, durationFrames) => {
-    const layout = getRoleLayoutForVariant('label', aspectRatio, scene.layoutVariant);
-    return createElementClip({
-      name: 'Label ' + String(index + 1),
-      elementPreset: 'Topic Header (H3)',
-      startFrame,
-      durationFrames,
-      previewX: layout.previewX,
-      previewY: layout.previewY,
-      previewWidth: layout.previewWidth,
-      previewHeight: layout.previewHeight,
-      displayText: scene.label,
-      designIntent: scene.designIntent + ' ' + scene.motionNote,
-      textColor: theme.accentColor,
-      textAlign: getSceneTextAlign(scene.layoutVariant),
-    });
-  });
-
-  const titleClips = buildLayerClips('title', 8, (scene, index, startFrame, durationFrames) => {
-    const layout = getRoleLayoutForVariant('title', aspectRatio, scene.layoutVariant);
-    return createElementClip({
-      name: (index === 0 ? 'Scene Title: ' : 'Section Title: ') + scene.title,
-      elementPreset: index === 0 ? 'Hero Title (H1)' : 'Section Title (H2)',
-      startFrame,
-      durationFrames,
-      previewX: layout.previewX,
-      previewY: layout.previewY,
-      previewWidth: layout.previewWidth,
-      previewHeight: layout.previewHeight,
-      displayText: scene.title,
-      designIntent: scene.designIntent + ' ' + scene.motionNote,
-      textColor: theme.textColor,
-      textAlign: getSceneTextAlign(scene.layoutVariant),
-    });
-  });
-
-  const bodyClips = buildLayerClips('body', 16, (scene, index, startFrame, durationFrames) => {
-    const layout = getRoleLayoutForVariant('body', aspectRatio, scene.layoutVariant);
-    return createElementClip({
-      name: 'Body Copy ' + String(index + 1),
-      elementPreset: 'Description',
-      startFrame,
-      durationFrames,
-      previewX: layout.previewX,
-      previewY: layout.previewY,
-      previewWidth: layout.previewWidth,
-      previewHeight: layout.previewHeight,
-      displayText: scene.body,
-      narrationText: scene.narration,
-      designIntent: scene.designIntent + ' ' + scene.motionNote,
-      textColor: theme.textColor,
-      textAlign: getSceneTextAlign(scene.layoutVariant),
-    });
-  });
-
-  const listClips = buildLayerClips('list', 22, (scene, index, startFrame, durationFrames) => {
-    const layout = getRoleLayoutForVariant('list', aspectRatio, scene.layoutVariant);
-    return createElementClip({
-      name: 'List ' + String(index + 1),
-      elementPreset: 'Body Text',
-      startFrame,
-      durationFrames,
-      previewX: layout.previewX,
-      previewY: layout.previewY,
-      previewWidth: layout.previewWidth,
-      previewHeight: layout.previewHeight,
-      displayText: scene.list.map((item) => '• ' + item).join('\n'),
-      narrationText: scene.narration,
-      designIntent: scene.designIntent + ' ' + scene.motionNote,
-      textColor: theme.textColor,
-      textAlign: getSceneTextAlign(scene.layoutVariant),
-    });
-  });
-
-  const graphicClips = buildLayerClips('graphic', 14, (scene, index, startFrame, durationFrames) => {
-    const layout = getRoleLayoutForVariant('graphic', aspectRatio, scene.layoutVariant);
-    return createElementClip({
-      name: 'Graphic ' + String(index + 1),
-      elementPreset: scene.accentPreset,
-      startFrame,
-      durationFrames,
-      previewX: layout.previewX,
-      previewY: layout.previewY,
-      previewWidth: layout.previewWidth,
-      previewHeight: layout.previewHeight,
-      designIntent: scene.designIntent + ' Visual role: ' + scene.visual + '. Use geometric placeholders instead of real images. ' + scene.motionNote,
-      fillColor: theme.surfaceColor,
-      accentColor: theme.accentColor,
-      textColor: theme.textColor,
-      borderRadiusPx: scene.accentPreset === 'Split Screen' ? 28 : 24,
-      textAlign: scene.layoutVariant === 'center-focus' ? 'center' : 'left',
-    });
-  });
-
-  return [
-    { type: 'video', index: 0, clips: [backgroundClip] },
-    { type: 'video', index: 1, clips: lineClips },
-    { type: 'video', index: 2, clips: labelClips },
-    { type: 'video', index: 3, clips: titleClips },
-    { type: 'video', index: 4, clips: bodyClips },
-    { type: 'video', index: 5, clips: listClips },
-    { type: 'video', index: 6, clips: graphicClips },
-  ];
-};
-
-const getStarterMontageDurationFrames = (currentSequence: TimelineSequence, userMessage: string) => {
-  const currentSceneCount = countNarrativeScenes(currentSequence.tracks as never);
-  const currentDurationLooksTemplate =
-    currentSceneCount <= 2 && currentSequence.durationFrames >= currentSequence.frameRate * 90;
-
-  if (!currentDurationLooksTemplate) {
-    return currentSequence.durationFrames;
-  }
-
-  const sceneCount = buildStoryboardScenes(deriveTopicTitle(userMessage), userMessage, prefersRussian(userMessage)).length;
-  const targetSeconds = clamp(Math.round(sceneCount * 4.8), 20, 42);
-  return Math.max(currentSequence.frameRate * 6, currentSequence.frameRate * targetSeconds);
-};
-
-const shouldGenerateStarterMontage = ({ schema, currentSequence, userMessage }: EnsureNonEmptyEditingSchemaForIntentInput) => {
-  if (!requestNeedsGeneratedCoverage(userMessage)) {
-    return false;
-  }
-
-  const generatedSceneCount = countNarrativeScenes(schema.tracks);
-  const currentSceneCount = countNarrativeScenes(currentSequence.tracks as never);
-
-  if (generatedSceneCount === 0) {
-    return true;
-  }
-
-  return generatedSceneCount < 3 && generatedSceneCount <= currentSceneCount + 1;
-};
-
-const getClipDisplayText = (clip: Pick<EditingSchemaClip, 'name' | 'content'>) =>
+const getClipDisplayText = (clip: Pick<EditingSchemaClip, "name" | "content">) =>
   sanitizeNullableText(clip.content?.displayText) ?? sanitizeNullableText(clip.name);
+
+const getPrimaryNarrationText = (sceneEntries: SceneInspectionEntry[]) => {
+  const narrationCandidates = sceneEntries
+    .map((entry) => sanitizeNullableText(entry.clip.content?.narrationText))
+    .filter((value): value is string => Boolean(value));
+
+  if (narrationCandidates.length === 0) {
+    return null;
+  }
+
+  return narrationCandidates.sort((left, right) => right.length - left.length)[0] ?? null;
+};
 
 const mergeSceneAnchors = (anchors: number[]) => {
   const merged: number[] = [];
 
   for (const anchor of anchors) {
     const previous = merged[merged.length - 1];
-    if (typeof previous === 'number' && anchor - previous <= SCENE_GROUPING_TOLERANCE_FRAMES) {
+    if (typeof previous === "number" && anchor - previous <= SCENE_GROUPING_TOLERANCE_FRAMES) {
       continue;
     }
 
@@ -1383,77 +642,223 @@ const mergeSceneAnchors = (anchors: number[]) => {
   return merged;
 };
 
-const describeVisual = (
-  entry: { clip: EditingSchemaClip; role: SceneRole } | undefined,
-  isRussian: boolean,
-) => {
+const describeVisual = (entry: SceneInspectionEntry | undefined, analysis: RequestAnalysis) => {
   if (!entry) {
-    return isRussian ? 'геометрический плейсхолдер' : 'geometric placeholder';
+    return analysis.language === "ru" ? "геометрическая или типографическая заглушка по теме" : "geometric or typographic placeholder visual";
   }
 
-  if (entry.clip.source === 'asset') {
-    return isRussian ? 'реальный медиа ассет' : 'real media asset';
+  if (entry.clip.source === "asset") {
+    return analysis.language === "ru" ? "реальный медиа-ассет" : "real media asset";
   }
 
-  if (sanitizeNullableText(entry.clip.elementPreset)) {
-    return sanitizeText(entry.clip.elementPreset, isRussian ? 'геометрический плейсхолдер' : 'geometric placeholder');
-  }
-
-  return isRussian ? 'геометрический плейсхолдер' : 'geometric placeholder';
+  return sanitizeText(
+    entry.clip.content?.designIntent ?? entry.clip.elementPreset,
+    analysis.language === "ru" ? "геометрическая или типографическая заглушка по теме" : "geometric or typographic placeholder visual",
+  );
 };
 
 const buildMotionDescription = (
-  hasTitle: boolean,
-  hasBody: boolean,
-  hasList: boolean,
-  graphicEntry: { clip: EditingSchemaClip; role: SceneRole } | undefined,
-  isRussian: boolean,
+  titleEntry: SceneInspectionEntry | undefined,
+  bodyEntry: SceneInspectionEntry | undefined,
+  listEntry: SceneInspectionEntry | undefined,
+  graphicEntry: SceneInspectionEntry | undefined,
+  analysis: RequestAnalysis,
 ) => {
-  const preset = sanitizeText(graphicEntry?.clip.elementPreset ?? '', '').toLowerCase();
-  const hasGraphic = Boolean(graphicEntry);
+  const preset = sanitizeText(graphicEntry?.clip.elementPreset ?? "", "").toLowerCase();
 
-  if (isRussian) {
-    if (preset.includes('arrow')) {
-      return 'Заголовок входит мягко, текст проявляется спокойно, графический акцент даёт короткое направленное движение.';
-    }
-
-    if (preset.includes('split')) {
-      return 'Заголовок и текст входят спокойно, а визуальный блок собирается как аккуратная split screen композиция.';
-    }
-
-    if (hasGraphic && hasList) {
-      return 'Заголовок появляется с лёгким подъёмом, текст и список входят мягко, графика добавляется аккуратным scale in.';
-    }
-
-    if (hasTitle || hasBody) {
-      return 'Типографика появляется плавно и последовательно, без тяжёлых или хаотичных анимаций.';
-    }
-
-    return 'Сцена держится на спокойных и аккуратных входах без перегруженных переходов.';
+  if (preset.includes("split")) {
+    return analysis.language === "ru"
+      ? "Кадр собирается как быстро читаемое сопоставление двух состояний или позиций."
+      : "The frame assembles as a quick readable comparison between two states or positions.";
   }
 
-  if (preset.includes('arrow')) {
-    return 'The headline enters softly, the copy fades in calmly, and the graphic accent adds a short directional motion cue.';
+  if (preset.includes("arrow")) {
+    return analysis.language === "ru"
+      ? "Сначала входит главный тезис, затем опорные пункты, а направляющий акцент закрывает ритм сцены."
+      : "The main thesis enters first, support points follow, and the directional accent closes the scene rhythm.";
   }
 
-  if (preset.includes('split')) {
-    return 'Headline and copy enter calmly while the visual block assembles like a clean split screen composition.';
+  if (graphicEntry && listEntry) {
+    return analysis.language === "ru"
+      ? "Сцена раскрывается по шагам: сначала заголовок, затем опорные пункты и визуальный акцент."
+      : "The scene unfolds in steps: headline first, then support points, then the visual accent.";
   }
 
-  if (hasGraphic && hasList) {
-    return 'The title rises in subtly, the copy and list fade in gently, and the graphic placeholder scales in without a jump.';
+  if (titleEntry || bodyEntry) {
+    return analysis.language === "ru"
+      ? "Типографика входит спокойно и последовательно без тяжёлой анимационной перегрузки."
+      : "Typography enters in a calm readable sequence without heavy animation.";
   }
 
-  if (hasTitle || hasBody) {
-    return 'Typography enters in a calm sequence with subtle motion rather than heavy animation.';
-  }
-
-  return 'The scene uses soft restrained entrances instead of noisy transitions.';
+  return analysis.language === "ru"
+    ? "Плавные restrained-входы и контролируемый motion-ритм."
+    : "Soft restrained entrances and a controlled motion rhythm.";
 };
 
-const collectScenePlans = (tracks: EditingSchema['tracks'], frameRate: number, userMessage: string): ScenePlanSummary[] => {
-  const isRussian = prefersRussian(userMessage);
-  const entries = tracks
+const inferSceneLayoutVariant = (
+  sceneEntries: SceneInspectionEntry[],
+  aspectRatio: number,
+  index: number,
+): SceneLayoutVariant => {
+  const fallback = getSceneLayoutVariant(index, aspectRatio);
+  const titleEntry = sceneEntries.find((entry) => entry.role === "title");
+  const bodyEntry = sceneEntries.find((entry) => entry.role === "body");
+  const graphicEntry = sceneEntries.find((entry) => entry.role === "graphic");
+
+  if (aspectRatio < 0.85) {
+    return graphicEntry && (graphicEntry.clip.previewY ?? 0) > 0.62 ? "stacked" : fallback;
+  }
+
+  if (!titleEntry && !bodyEntry && graphicEntry) {
+    return "center-focus";
+  }
+
+  const titleX = titleEntry?.clip.previewX ?? bodyEntry?.clip.previewX ?? 0.08;
+  const titleY = titleEntry?.clip.previewY ?? bodyEntry?.clip.previewY ?? 0.17;
+  const titleWidth = titleEntry?.clip.previewWidth ?? bodyEntry?.clip.previewWidth ?? 0.46;
+  const graphicX = graphicEntry?.clip.previewX ?? 0.6;
+  const graphicY = graphicEntry?.clip.previewY ?? 0.2;
+
+  if (graphicEntry && graphicY > titleY + 0.22) {
+    return "stacked";
+  }
+
+  if (graphicEntry && graphicX < 0.34 && titleX > 0.4) {
+    return "split-right";
+  }
+
+  if (graphicEntry && graphicX > 0.52 && titleX < 0.36) {
+    return "split-left";
+  }
+
+  if (titleWidth > 0.58 && titleX > 0.16 && titleX < 0.28) {
+    return "center-focus";
+  }
+
+  if (graphicEntry && titleWidth > 0.62) {
+    return "poster";
+  }
+
+  return fallback;
+};
+
+const isSceneAutoLayoutCandidate = (entry: SceneEditableEntry) =>
+  entry.trackType === "video" &&
+  entry.clip.source === "element" &&
+  entry.role !== "background" &&
+  entry.role !== "subtitle";
+
+const relayoutGeneratedScenes = ({
+  tracks,
+  aspectRatio,
+  forceRelayout,
+}: {
+  tracks: EditingSchema["tracks"];
+  aspectRatio: number;
+  forceRelayout: boolean;
+}) => {
+  if (!forceRelayout) {
+    return tracks;
+  }
+
+  const nextTracks = tracks.map((track) => ({
+    ...track,
+    clips: track.clips.map((clip) => ({ ...clip })),
+  }));
+
+  const entries: SceneEditableEntry[] = nextTracks
+    .flatMap((track, trackIndex) =>
+      track.clips.map((clip, clipIndex) => {
+        const elementPreset = resolveElementPreset(clip);
+        const content = normalizeClipContent({ clip, trackType: track.type, elementPreset });
+        return {
+          trackIndex,
+          clipIndex,
+          trackType: track.type,
+          clip: {
+            ...clip,
+            content,
+            elementPreset,
+          },
+          role: detectSceneRole({
+            clipName: clip.name,
+            trackType: track.type,
+            elementPreset,
+            displayText: content?.displayText,
+          }),
+        };
+      }),
+    )
+    .filter((entry) => entry.trackType !== "audio")
+    .filter((entry) => entry.clip.durationFrames >= 18)
+    .filter((entry) => !(entry.role === "background" && isFullFrameBackgroundClip(entry.clip)));
+
+  if (entries.length === 0) {
+    return tracks;
+  }
+
+  const anchors = mergeSceneAnchors(
+    Array.from(new Set(entries.map((entry) => entry.clip.startFrame))).sort((left, right) => left - right),
+  );
+  const maxEndFrame = Math.max(...entries.map((entry) => entry.clip.startFrame + entry.clip.durationFrames));
+
+  anchors.slice(0, 8).forEach((startFrame, sceneIndex) => {
+    const endFrame = anchors[sceneIndex + 1] ?? maxEndFrame;
+    const sceneEntries = entries.filter(
+      (entry) => entry.clip.startFrame < endFrame && entry.clip.startFrame + entry.clip.durationFrames > startFrame,
+    );
+
+    if (sceneEntries.some((entry) => entry.clip.source === "asset")) {
+      return;
+    }
+
+    const editableEntries = sceneEntries.filter(isSceneAutoLayoutCandidate);
+    if (editableEntries.length < 2) {
+      return;
+    }
+
+    const layoutVariant = getSceneLayoutVariant(sceneIndex, aspectRatio);
+    const textAlign = getSceneTextAlign(layoutVariant);
+
+    editableEntries.forEach((entry) => {
+      const layout = getRoleLayoutForVariant(entry.role, aspectRatio, layoutVariant, sceneIndex);
+      const track = nextTracks[entry.trackIndex];
+      const clip = track?.clips[entry.clipIndex];
+      if (!track || !clip) {
+        return;
+      }
+
+      const isTextRole =
+        entry.role === "label" ||
+        entry.role === "title" ||
+        entry.role === "body" ||
+        entry.role === "list";
+
+      track.clips[entry.clipIndex] = {
+        ...clip,
+        previewX: layout.previewX,
+        previewY: layout.previewY,
+        previewWidth: layout.previewWidth,
+        previewHeight: layout.previewHeight,
+        elementStyle: clip.elementStyle
+          ? {
+              ...clip.elementStyle,
+              textAlign: isTextRole ? clip.elementStyle.textAlign ?? textAlign : clip.elementStyle.textAlign,
+            }
+          : clip.elementStyle,
+      };
+    });
+  });
+
+  return nextTracks;
+};
+const collectScenePlans = (
+  tracks: EditingSchema["tracks"],
+  frameRate: number,
+  aspectRatio: number,
+  analysis: RequestAnalysis,
+): ScenePlanSummary[] => {
+  const entries: SceneInspectionEntry[] = tracks
     .flatMap((track) =>
       track.clips.map((clip) => {
         const elementPreset = resolveElementPreset(clip);
@@ -1474,47 +879,52 @@ const collectScenePlans = (tracks: EditingSchema['tracks'], frameRate: number, u
         };
       }),
     )
-    .filter((entry) => entry.trackType !== 'audio')
+    .filter((entry) => entry.trackType !== "audio")
     .filter((entry) => entry.clip.durationFrames >= 18)
-    .filter((entry) => !(entry.role === 'background' && isFullFrameBackgroundClip(entry.clip)));
+    .filter((entry) => !(entry.role === "background" && isFullFrameBackgroundClip(entry.clip)));
 
   if (entries.length === 0) {
     return [];
   }
 
-  const anchors = mergeSceneAnchors(Array.from(new Set<number>(entries.map((entry) => entry.clip.startFrame))).sort((left, right) => left - right));
+  const anchors = mergeSceneAnchors(
+    Array.from(new Set(entries.map((entry) => entry.clip.startFrame))).sort((left, right) => left - right),
+  );
   const maxEndFrame = Math.max(...entries.map((entry) => entry.clip.startFrame + entry.clip.durationFrames));
 
-  return anchors.slice(0, 6).map((startFrame, index) => {
+  return anchors.slice(0, 8).map((startFrame, index) => {
     const endFrame = anchors[index + 1] ?? maxEndFrame;
     const sceneEntries = entries.filter(
       (entry) => entry.clip.startFrame < endFrame && entry.clip.startFrame + entry.clip.durationFrames > startFrame,
     );
 
-    const labelEntry = sceneEntries.find((entry) => entry.role === 'label');
+    const labelEntry = sceneEntries.find((entry) => entry.role === "label");
     const titleEntry =
-      sceneEntries.find((entry) => entry.role === 'title') ??
+      sceneEntries.find((entry) => entry.role === "title") ??
       sceneEntries.find((entry) => Boolean(getClipDisplayText(entry.clip)));
-    const listEntry = sceneEntries.find((entry) => entry.role === 'list');
+    const listEntry = sceneEntries.find((entry) => entry.role === "list");
     const bodyEntry =
-      sceneEntries.find((entry) => entry.role === 'body') ??
+      sceneEntries.find((entry) => entry.role === "body") ??
       sceneEntries.find((entry) => entry !== titleEntry && entry !== listEntry && Boolean(getClipDisplayText(entry.clip)));
-    const graphicEntry = sceneEntries.find((entry) => entry.role === 'graphic');
+    const graphicEntry = sceneEntries.find((entry) => entry.role === "graphic");
 
+    const layoutVariant = inferSceneLayoutVariant(sceneEntries, aspectRatio, index);
+    const narration = getPrimaryNarrationText(sceneEntries);
     const title =
-      getClipDisplayText(titleEntry?.clip ?? { name: '', content: undefined }) ??
-      (isRussian ? 'Сцена ' + String(index + 1) : 'Scene ' + String(index + 1));
+      getClipDisplayText(titleEntry?.clip ?? { name: "", content: undefined }) ??
+      (analysis.language === "ru" ? `Сцена ${index + 1}` : `Scene ${index + 1}`);
 
     return {
       startFrame,
       endFrame,
-      label: getClipDisplayText(labelEntry?.clip ?? { name: '', content: undefined }),
+      label: getClipDisplayText(labelEntry?.clip ?? { name: "", content: undefined }),
       title,
-      body: getClipDisplayText(bodyEntry?.clip ?? { name: '', content: undefined }),
+      body: getClipDisplayText(bodyEntry?.clip ?? { name: "", content: undefined }),
       list: splitListItems(listEntry?.clip.content?.displayText),
-      visual: describeVisual(graphicEntry, isRussian),
-      layout: getLayoutSummary(getSceneLayoutVariant(index, 16 / 9), isRussian),
-      motion: buildMotionDescription(Boolean(titleEntry), Boolean(bodyEntry), Boolean(listEntry), graphicEntry, isRussian),
+      visual: describeVisual(graphicEntry, analysis),
+      narration,
+      layout: getLayoutSummary(layoutVariant, analysis.language),
+      motion: buildMotionDescription(titleEntry, bodyEntry, listEntry, graphicEntry, analysis),
     };
   });
 };
@@ -1526,10 +936,10 @@ const formatTimeRange = (startFrame: number, endFrame: number, frameRate: number
     const tenths = Math.floor((seconds - totalSeconds) * 10);
     const minutes = Math.floor(totalSeconds / 60);
     const remainingSeconds = totalSeconds % 60;
-    return String(minutes) + ':' + String(remainingSeconds).padStart(2, '0') + '.' + String(tenths);
+    return `${minutes}:${String(remainingSeconds).padStart(2, "0")}.${tenths}`;
   };
 
-  return format(startFrame) + '-' + format(Math.max(endFrame - 1, startFrame));
+  return `${format(startFrame)}-${format(Math.max(endFrame - 1, startFrame))}`;
 };
 
 const buildStoryboardAssistantMessage = ({
@@ -1537,67 +947,148 @@ const buildStoryboardAssistantMessage = ({
   tracks,
   frameRate,
   aspectRatio,
-  userMessage,
+  analysis,
 }: {
   assistantMessage: string;
-  tracks: EditingSchema['tracks'];
+  tracks: EditingSchema["tracks"];
   frameRate: number;
   aspectRatio: number;
-  userMessage: string;
+  analysis: RequestAnalysis;
 }) => {
-  const isRussian = prefersRussian(userMessage);
-  const scenePlans = collectScenePlans(tracks, frameRate, userMessage);
+  const scenePlans = collectScenePlans(tracks, frameRate, aspectRatio, analysis);
   const intro = sanitizeText(
     assistantMessage,
-    isRussian ? 'Собрал структуру видео по запросу.' : 'Built the requested video structure.',
+    analysis.language === "ru"
+      ? "Собрал структуру ролика и разложил её по сценам."
+      : "Built the requested video structure and mapped it scene by scene.",
   );
 
   if (scenePlans.length === 0) {
     return intro;
   }
 
-  const lines: string[] = [intro, ''];
-  lines.push(isRussian ? '## План видео' : '## Video plan');
-  lines.push((isRussian ? 'Формат: ' : 'Format: ') + getAspectRatioLabel(aspectRatio) + ', ' + getBackgroundSummary(userMessage, isRussian) + '.');
-  lines.push(getCompositionSummary(aspectRatio, isRussian));
+  const lines: string[] = [intro, ""];
+  lines.push(analysis.language === "ru" ? "## Контент-план" : "## Content Plan");
+  lines.push(
+    `${analysis.language === "ru" ? "Формат" : "Format"}: ${getAspectRatioLabel(aspectRatio)}, ${analysis.backgroundSummary}.`,
+  );
+  lines.push(getCompositionSummary(aspectRatio, analysis.language));
+
+  if (analysis.visualSignals.length > 0) {
+    lines.push(
+      `${analysis.language === "ru" ? "Визуальное направление" : "Visual direction"}: ${analysis.visualSignals.join(", ")}.`,
+    );
+  }
 
   scenePlans.forEach((scene, index) => {
-    lines.push('');
-    lines.push((isRussian ? '### Сцена ' : '### Scene ') + String(index + 1) + ' · ' + formatTimeRange(scene.startFrame, scene.endFrame, frameRate));
+    const screenText = [scene.title, scene.body, ...scene.list]
+      .filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+    lines.push("");
+    lines.push(
+      `${analysis.language === "ru" ? "### Сцена" : "### Scene"} ${index + 1} · ${formatTimeRange(scene.startFrame, scene.endFrame, frameRate)}`,
+    );
+
     if (scene.label) {
-      lines.push((isRussian ? 'Лейбл: ' : 'Label: ') + scene.label);
+      lines.push(`${analysis.language === "ru" ? "Метка" : "Label"}: ${scene.label}`);
     }
-    lines.push((isRussian ? 'Заголовок: ' : 'Title: ') + scene.title);
-    lines.push(getCompositionSummary(aspectRatio, isRussian));
-    if (scene.body) {
-      lines.push((isRussian ? 'Описание: ' : 'Description: ') + scene.body);
+
+    lines.push(`${analysis.language === "ru" ? "Тайтл" : "Title"}: ${scene.title}`);
+    lines.push(`${analysis.language === "ru" ? "Лейаут" : "Layout"}: ${scene.layout}`);
+
+    if (screenText.length > 0) {
+      lines.push(analysis.language === "ru" ? "Экранный текст:" : "On-screen text:");
+      screenText.forEach((item) => {
+        lines.push(`- ${item}`);
+      });
     }
-    if (scene.list.length > 0) {
-      lines.push((isRussian ? 'Список: ' : 'List: ') + scene.list.join(' | '));
+
+    if (scene.narration) {
+      lines.push(`${analysis.language === "ru" ? "Подробный текст" : "Scene detail"}: ${scene.narration}`);
     }
+
     if (scene.visual) {
-      lines.push((isRussian ? 'Графика: ' : 'Visual: ') + scene.visual);
+      lines.push(`${analysis.language === "ru" ? "Визуал" : "Visual"}: ${scene.visual}`);
     }
-    lines.push((isRussian ? 'Движение: ' : 'Motion: ') + scene.motion);
+
+    lines.push(`${analysis.language === "ru" ? "Движение" : "Motion"}: ${scene.motion}`);
   });
 
-  return lines.join('\n');
+  return lines.join("\n");
 };
 
-export const normalizeEditingSchema = ({ schema, currentSequence, assets, userMessage }: NormalizeEditingSchemaInput): EditingSchema => {
+const hasStructuredSupportCopy = (scene: ScenePlanSummary) =>
+  Boolean((scene.body && scene.body !== scene.title) || scene.list.length > 0 || scene.narration);
+
+const hasSpecificVisualDirection = (scene: ScenePlanSummary) => {
+  const visual = sanitizeNullableText(scene.visual)?.toLowerCase() ?? "";
+  if (!visual) {
+    return false;
+  }
+
+  return !visual.includes("placeholder") && !visual.includes("заглуш");
+};
+
+const shouldGenerateStarterMontage = ({
+  schema,
+  currentSequence,
+  analysis,
+}: {
+  schema: EditingSchema;
+  currentSequence: TimelineSequence;
+  analysis: RequestAnalysis;
+}) => {
+  if (!analysis.needsGeneratedCoverage) {
+    return false;
+  }
+
+  const targetAspectRatio =
+    schema.aspectRatio ?? analysis.aspectRatio ?? currentSequence.aspectRatio ?? DEFAULT_VIEWPORT_ASPECT_RATIO;
+  const scenePlans = collectScenePlans(schema.tracks, currentSequence.frameRate, targetAspectRatio, analysis);
+  const generatedSceneCount = countNarrativeScenes(schema.tracks);
+  const currentSceneCount = countNarrativeScenes(currentSequence.tracks as never);
+  const generatedVideoTrackCount = schema.tracks.filter((track) => track.type === "video" && track.clips.length > 0).length;
+
+  if (generatedSceneCount === 0 || scenePlans.length === 0) {
+    return true;
+  }
+
+  const supportedScenes = scenePlans.filter(hasStructuredSupportCopy).length;
+  const visuallyDirectedScenes = scenePlans.filter(hasSpecificVisualDirection).length;
+  const lacksEnoughSupportCopy = supportedScenes < Math.max(3, Math.ceil(scenePlans.length * 0.7));
+  const lacksEnoughVisualDirection = visuallyDirectedScenes < Math.max(2, Math.ceil(scenePlans.length * 0.6));
+  const lacksLayeredVideoStructure = generatedVideoTrackCount < 4;
+
+  if (generatedSceneCount < 3 && generatedSceneCount <= currentSceneCount + 1) {
+    return true;
+  }
+
+  return lacksLayeredVideoStructure || lacksEnoughSupportCopy || lacksEnoughVisualDirection;
+};
+
+export const normalizeEditingSchema = ({
+  schema,
+  currentSequence,
+  assets,
+  userMessage,
+}: NormalizeEditingSchemaInput): EditingSchema => {
+  const analysis = analyzeUserRequest(userMessage);
   const requestedDuration =
-    typeof schema.durationFrames === 'number' && Number.isFinite(schema.durationFrames)
+    typeof schema.durationFrames === "number" && Number.isFinite(schema.durationFrames)
       ? Math.max(Math.round(schema.durationFrames), 1)
       : null;
 
   const sequenceDurationFrames = requestedDuration ?? currentSequence.durationFrames;
   const requestedAspectRatio =
-    typeof schema.aspectRatio === 'number' && Number.isFinite(schema.aspectRatio) && schema.aspectRatio > 0.1
+    typeof schema.aspectRatio === "number" && Number.isFinite(schema.aspectRatio) && schema.aspectRatio > 0.1
       ? schema.aspectRatio
-      : inferRequestedAspectRatio(userMessage);
+      : analysis.aspectRatio;
   const targetAspectRatio = requestedAspectRatio ?? currentSequence.aspectRatio ?? DEFAULT_VIEWPORT_ASPECT_RATIO;
 
+  const allowGeneratedAudio = EXPLICIT_AUDIO_REQUEST_PATTERN.test(userMessage);
+
   const normalizedTracks = schema.tracks
+    .filter((track) => allowGeneratedAudio || track.type !== "audio")
     .map((track) => ({
       ...track,
       index: Math.max(0, Math.round(track.index)),
@@ -1609,7 +1100,7 @@ export const normalizeEditingSchema = ({ schema, currentSequence, assets, userMe
             trackType: track.type,
             sequenceDurationFrames,
             assets,
-            userMessage,
+            analysis,
             aspectRatio: targetAspectRatio,
           }),
         )
@@ -1620,50 +1111,65 @@ export const normalizeEditingSchema = ({ schema, currentSequence, assets, userMe
         return left.index - right.index;
       }
 
-      const order: TimelineTrackType[] = ['video', 'audio', 'subtitle'];
+      const order: TimelineTrackType[] = ["video", "audio", "subtitle"];
       return order.indexOf(left.type) - order.indexOf(right.type);
     });
 
-  const narrativeSceneCount = countNarrativeScenes(normalizedTracks);
+  const rebalancedTracks = relayoutGeneratedScenes({
+    tracks: normalizedTracks,
+    aspectRatio: targetAspectRatio,
+    forceRelayout: analysis.needsGeneratedCoverage,
+  });
+
+  const narrativeSceneCount = countNarrativeScenes(rebalancedTracks);
   const baseAssistantMessage = sanitizeText(
     schema.assistantMessage,
-    hasTrackEdits({ tracks: normalizedTracks })
-      ? prefersRussian(userMessage)
-        ? 'Собрал структуру видео по вашему запросу.'
-        : 'Built the requested video structure.'
-      : prefersRussian(userMessage)
-        ? 'Пока не применил изменения к таймлайну. Уточните точную задачу: ' + sanitizeText(userMessage, 'что нужно изменить?')
-        : 'No timeline edits applied yet. Clarify the exact edit goal: ' + sanitizeText(userMessage, 'what should I change first?'),
+    hasTrackEdits({ tracks: rebalancedTracks })
+      ? analysis.language === "ru"
+        ? "Собрал структуру ролика и подготовил сцены."
+        : "Built the requested video structure and prepared the scenes."
+      : analysis.language === "ru"
+        ? `Пока не применил изменения к таймлайну. Уточни точнее задачу: ${sanitizeText(userMessage, "что нужно изменить в первую очередь?")}`
+        : `No timeline edits applied yet. Clarify the exact edit goal: ${sanitizeText(userMessage, "what should I change first?")}`,
   );
 
-  const shouldAttachStoryboardPlan = hasTrackEdits({ tracks: normalizedTracks }) && (requestNeedsGeneratedCoverage(userMessage) || narrativeSceneCount >= 3);
+  const shouldAttachStoryboardPlan =
+    hasTrackEdits({ tracks: rebalancedTracks }) && (analysis.needsGeneratedCoverage || narrativeSceneCount >= 3);
 
   return {
     ...schema,
     assistantMessage: shouldAttachStoryboardPlan
       ? buildStoryboardAssistantMessage({
           assistantMessage: baseAssistantMessage,
-          tracks: normalizedTracks,
+          tracks: rebalancedTracks,
           frameRate: currentSequence.frameRate,
           aspectRatio: targetAspectRatio,
-          userMessage,
+          analysis,
         })
       : baseAssistantMessage,
     durationFrames: requestedDuration,
     aspectRatio: targetAspectRatio,
-    tracks: normalizedTracks,
+    tracks: rebalancedTracks,
   };
 };
 
-export const ensureNonEmptyEditingSchemaForIntent = ({ schema, currentSequence, userMessage }: EnsureNonEmptyEditingSchemaForIntentInput): EditingSchema => {
-  if (shouldGenerateStarterMontage({ schema, currentSequence, userMessage })) {
-    const fallbackDurationFrames = schema.durationFrames ?? getStarterMontageDurationFrames(currentSequence, userMessage);
+export const ensureNonEmptyEditingSchemaForIntent = ({
+  schema,
+  currentSequence,
+  userMessage,
+}: EnsureNonEmptyEditingSchemaForIntentInput): EditingSchema => {
+  const analysis = analyzeUserRequest(userMessage);
+
+  if (shouldGenerateStarterMontage({ schema, currentSequence, analysis })) {
+    const fallbackDurationFrames =
+      schema.durationFrames ?? getStarterMontageDurationFrames(currentSequence, userMessage, analysis);
     const fallbackAspectRatio =
-      schema.aspectRatio ?? inferRequestedAspectRatio(userMessage) ?? currentSequence.aspectRatio ?? DEFAULT_VIEWPORT_ASPECT_RATIO;
+      schema.aspectRatio ?? analysis.aspectRatio ?? currentSequence.aspectRatio ?? DEFAULT_VIEWPORT_ASPECT_RATIO;
     const fallbackTracks = createStarterMontageTracks({
       durationFrames: fallbackDurationFrames,
       userMessage,
       aspectRatio: fallbackAspectRatio,
+      analysis,
     });
 
     return {
@@ -1671,28 +1177,41 @@ export const ensureNonEmptyEditingSchemaForIntent = ({ schema, currentSequence, 
       durationFrames: fallbackDurationFrames,
       aspectRatio: fallbackAspectRatio,
       assistantMessage: buildStoryboardAssistantMessage({
-        assistantMessage: prefersRussian(userMessage)
-          ? 'Собрал полноценный сценовый план и разложил тему на понятные визуальные блоки.'
-          : 'Built a fuller scene by scene draft and spread the topic across clear visual beats.',
+        assistantMessage:
+          analysis.language === "ru"
+            ? "Модель раскрыла тему слишком поверхностно, поэтому я собрал более полный черновик с сильной сценовой структурой."
+            : "The model did not expand the topic deeply enough, so I assembled a fuller draft with a stronger scene structure.",
         tracks: fallbackTracks,
         frameRate: currentSequence.frameRate,
         aspectRatio: fallbackAspectRatio,
-        userMessage,
+        analysis,
       }),
       tracks: fallbackTracks,
     };
   }
 
-  if (hasTrackEdits(schema) || !hasExplicitEditIntent(userMessage)) {
+  if (hasTrackEdits(schema) || !analysis.hasExplicitEditIntent) {
     return schema;
   }
 
   return {
     ...schema,
     durationFrames: schema.durationFrames,
-    assistantMessage: prefersRussian(userMessage)
-      ? 'Изменения не были применены автоматически, потому что модель не вернула достаточно точную EditingSchema для этого запроса.'
-      : 'No edits were applied automatically because the model did not return a precise enough EditingSchema for this request.',
+    assistantMessage:
+      analysis.language === "ru"
+        ? "Изменения не были применены автоматически, потому что модель не вернула достаточно точный EditingSchema для этого запроса."
+        : "No edits were applied automatically because the model did not return a precise enough EditingSchema for this request.",
     tracks: [],
   };
 };
+
+
+
+
+
+
+
+
+
+
+

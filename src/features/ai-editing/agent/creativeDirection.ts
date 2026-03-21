@@ -1,4 +1,4 @@
-﻿import { TimelineSequence } from "@/features/timeline/types/timeline";
+import { TimelineSequence } from "@/features/timeline/types/timeline";
 
 export interface CreativeDirectionContext {
   planningSteps: string[];
@@ -57,18 +57,17 @@ export const buildCreativeDirectionContext = (
   currentSequence: TimelineSequence,
 ): CreativeDirectionContext => ({
   planningSteps: [
-    "Parse the user's goal, audience, platform, and emotional tone before deciding visuals.",
-    "Choose an appropriate visual language for this request instead of defaulting to one composition template.",
-    "Plan each scene with a clear job: setup, explanation, comparison, proof, payoff, or transition.",
-    "Use typography, color, spacing, scale, shape, and motion intentionally to support meaning.",
-    "Keep contrast and readability high, but do not flatten style into generic safe layouts.",
+    "Parse the user's goal, audience, platform, and tone before deciding visuals.",
+    "Use the requested frame and available assets as the starting point for composition.",
+    "Plan each scene around one clear job instead of dumping everything into one card.",
+    "Let spacing, contrast, scale, and motion support meaning.",
     ...pickToneHints(userMessage),
   ],
   visualControls: [
-    "You may choose colors, type scale, font weight, text alignment, padding, corner radius, opacity, and layout density per scene.",
-    "You may vary scene composition when the idea benefits from it: centered, asymmetrical, split, stacked, modular, poster-like, or kinetic.",
-    "You may use backgrounds, cards, overlays, lines, shapes, and placeholder graphics when they improve communication or mood.",
-    "You may keep scenes minimal when the message is already strong and decoration would reduce clarity.",
+    "You may tune layout density, alignment, type scale, surfaces, and accents per scene.",
+    "Let wide frames breathe horizontally and portrait frames stack naturally.",
+    "Use backgrounds, cards, overlays, lines, and placeholder shapes when they clarify the message.",
+    "Keep scenes minimal when the message is already strong.",
   ],
   designPrinciples: [
     "Different scenes can share one art direction while still having distinct visual roles.",

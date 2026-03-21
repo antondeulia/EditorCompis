@@ -1,4 +1,4 @@
-import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+﻿import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { applyEditingSchemaToTimeline } from "@/features/ai-editing/services/applyEditingSchemaToTimeline";
 import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
@@ -38,9 +38,11 @@ interface UseAiEditControllerOptions {
 const hasConcreteTimelineEdits = (schema: EditingSchema) =>
   schema.tracks.some((track) => track.clips.length > 0);
 
+const CYRILLIC_PATTERN = /[А-Яа-яЁё]/;
+
 const buildNoTimelineChangesFallback = (draftMessage: string) =>
-  /[А-Яа-яЁё]/.test(draftMessage)
-    ? "Изменения в таймлайне не применились. Уточни, что именно нужно поменять."
+  CYRILLIC_PATTERN.test(draftMessage)
+    ? "Я не внёс изменений в таймлайн. Напиши точнее, что именно нужно поменять, и я попробую снова."
     : "I didn't end up changing the timeline. Tell me what to change and I'll try again.";
 
 export const useAiEditController = ({
@@ -377,4 +379,5 @@ export const useAiEditController = ({
     setDraft,
   };
 };
+
 

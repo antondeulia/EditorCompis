@@ -65,7 +65,7 @@ export const AiEditPanel = ({
             value={draft}
             onChange={(event) => onDraftChange(event.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="Describe the edit you need..."
+            placeholder="Describe the edit you need, e.g. 16:9 YouTube or 9:16 Shorts..."
           />
           <button
             type="button"

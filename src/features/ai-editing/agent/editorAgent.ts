@@ -1,6 +1,10 @@
-﻿import { TimelineSequence } from "@/features/timeline/types/timeline";
+import { TimelineSequence } from "@/features/timeline/types/timeline";
+
+import { analyzeUserRequest } from "@/features/ai-editing/services/requestAnalysis";
+import { buildSceneBlueprints, createSceneLabel } from "@/features/ai-editing/services/contentPlanBuilder";
 
 import { buildCreativeDirectionContext } from "./creativeDirection";
+import { buildSequenceSceneSummary } from "./sequenceSceneSummary";
 
 export interface AiEditorAssetContext {
   id: string;
@@ -50,53 +54,46 @@ const TEXT_PRESET_NAMES = [
 
 export const AI_EDITOR_TOOLS: AiEditorTool[] = [
   {
+    id: "request_analyzer",
+    name: "Request Analyzer",
+    description: "Extracts constraints, intent, topic, format, tone, and useful context from the prompt before editing.",
+  },
+  {
     id: "content_planner",
-    name: "Content and Script Planner",
-    description:
-      "Generates missing intermediary content, structure, or copy when the requested edit cannot be completed without it.",
+    name: "Content Planner",
+    description: "Designs a strong arc for the piece and decides what each scene or beat must accomplish.",
   },
   {
     id: "storyboard_designer",
     name: "Storyboard Designer",
-    description:
-      "Turns ideas into scene-by-scene visual beats with clear purpose, pacing, and hierarchy.",
+    description: "Turns the plan into scene-by-scene visual beats with hierarchy, layout, and pacing.",
+  },
+  {
+    id: "content_writer",
+    name: "Scene Writer",
+    description: "Writes concise on-screen copy and fuller narration or guidance when the request needs generated content.",
   },
   {
     id: "visual_director",
-    name: "Visual Direction Tool",
-    description:
-      "Chooses typography, color, density, surface treatment, and layout language based on context instead of a fixed template.",
+    name: "Visual Director",
+    description: "Chooses composition, typography, surfaces, accents, and motion intent to fit the request instead of a fixed template.",
   },
   {
-    id: "timeline_cut",
-    name: "Timeline Cut Tool",
-    description:
-      "Cuts, trims, and rearranges clips while keeping timing consistent with the sequence.",
-  },
-  {
-    id: "pacing_optimizer",
-    name: "Pacing Optimizer",
-    description:
-      "Adjusts rhythm and clip lengths for better flow and viewer retention.",
-  },
-  {
-    id: "audio_balance",
-    name: "Audio Balance Tool",
-    description:
-      "Aligns audio track decisions with dialogue, music, and scene intent.",
+    id: "timeline_executor",
+    name: "Timeline Executor",
+    description: "Maps the plan into concrete timeline tracks and clips that can be applied directly.",
   },
   {
     id: "subtitle_builder",
     name: "Subtitle Builder",
-    description:
-      "Creates readable subtitle clips with timing and style guidance.",
+    description: "Creates subtitle clips with timing and style guidance when the user asks for captions.",
   },
 ];
 
 const formatToolList = () =>
-  AI_EDITOR_TOOLS.map((tool) => "- " + tool.name + ": " + tool.description).join("\n");
+  AI_EDITOR_TOOLS.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n");
 
-const formatPresetList = (values: readonly string[]) => values.map((value) => "- " + value).join("\n");
+const formatPresetList = (values: readonly string[]) => values.map((value) => `- ${value}`).join("\n");
 
 const summarizeCurrentSequence = (currentSequence: TimelineSequence) => ({
   id: currentSequence.id,
@@ -156,51 +153,20 @@ const summarizeCurrentSequence = (currentSequence: TimelineSequence) => ({
 
 export const buildVideoEditorSystemPrompt = () =>
   [
-    "You are a helpful AI video editing assistant inside a timeline editor.",
-    "When the user asks for a concrete edit, return an EditingSchema that can be applied directly to the timeline.",
-    "Core behavior:",
-    "- Reply in the user's language when possible.",
-    "- Match the user's tone, domain, and creative intent instead of forcing one house style.",
-    "- If the user is greeting, chatting, or asking a general question with no actionable edit request, set tracks: [] and durationFrames: null.",
-    "- If the user requests a concrete video or timeline change, produce the smallest useful set of timeline edits that accomplishes it.",
-    "- Stay scoped to the request. Do not invent unrelated scenes, assets, or decorative elements.",
-    "- Treat EditingSchema as the source of truth. Do not replace requested visible text, colors, composition, or mood with preset placeholders.",
-    "- Generate missing copy, structure, or scene content only when it is required to fulfill the requested edit.",
-    "- For new videos, explainers, lessons, presentations, social videos, or brand pieces, think like a real editor and visual director: understand the ask, plan the structure, choose a visual language, then execute scene by scene.",
-    "- Do not lock yourself into one composition pattern such as left text plus right placeholder unless that is actually the best fit for this request.",
-    "- You may choose colors, font sizes, font weights, padding, corner radius, backgrounds, cards, overlays, and graphic treatments whenever they help clarity, tone, or emphasis.",
-    "- Use typography, scale, spacing, composition, color, and motion intentionally. Readable does not mean generic.",
-    "- Keep on-screen text concise per scene. Put fuller explanation into narrationText instead of dumping everything into one text block.",
-    "- Never collapse a full explainer into one oversized text card. Split the topic into multiple beats and keep each beat visually scannable.",
-    "- Keep strong contrast and readable safe margins for the requested format.",
-    "- If the user specifies aspect ratio, orientation, destination platform, brand feel, visual references, or an explicit background color, preserve that intent in the resulting structure and styling.",
-    "- If there are no real images or assets for a scene, you may use geometric or typographic placeholder elements, but only when they serve the concept.",
-    "- If the user asks for a specific background color such as purple, create a real full-frame background in that color instead of leaving the canvas visually neutral.",
-    "- Encode motion thinking explicitly. If there are no dedicated animation fields for a clip, put motion or transition intent into clip.content.designIntent.",
-    "EditingSchema contract:",
-    "- Return only valid JSON in the requested schema.",
-    "- Build an EditingSchema that can be applied directly to a timeline.",
-    "- Keep frame ranges inside sequence duration.",
-    "- Set track.index as the index among tracks of the same type.",
-    "- Use provided assets only when source is asset and set clip.mediaUrl from provided asset.mediaUrl.",
-    "- For subtitle or caption lines, use track.type subtitle and source element.",
-    "- For generated visual scenes, prefer source element with explicit previewX, previewY, previewWidth, and previewHeight.",
-    "- clip.name is an internal timeline label. Visible wording belongs in clip.content.displayText.",
-    "- Use clip.content.narrationText for spoken script or narration guidance.",
-    "- Use clip.content.designIntent to explain the role of the scene or element, including composition and motion intent when useful.",
-    "- Use clip.elementPreset only when a renderer-compatible preset helps. Do not rely on presets as a substitute for layout or style thinking.",
-    "- Use clip.elementStyle to control typography, color, strokes, surfaces, padding, opacity, and other visual attributes whenever needed.",
-    "Subtitle rules:",
-    "- Use subtitle style fields only if the user explicitly requests subtitle styling, otherwise set subtitle style fields to null.",
-    "- If transcriptSegments are provided and the user asks for subtitles or captions, use transcript text exactly.",
-    "- Subtitle timing: startFrame equals round(startSeconds times frameRate), durationFrames equals max of one and round(duration times frameRate).",
-    "assistantMessage:",
-    "- Write naturally and concisely for normal edits.",
-    "- When generating or rebuilding a full video, show the plan you are creating: chosen format, visual language, scene structure, graphic logic, and motion intent.",
-    "- Markdown is optional. Use short lists only when they improve readability.",
+    "You are an AI editor inside a timeline editor.",
+    "Return only JSON that matches EditingSchema.",
+    "If the user is just chatting, return tracks: [] and durationFrames: null.",
+    "For real edit requests, honor the requested format, topic, assets, and visual tone before placing clips.",
+    "Treat aspect ratio and orientation as real canvas constraints, not as decoration inside another frame.",
+    "For full builds, think scene by scene: what each beat says, how it is laid out, and how it moves.",
+    "Keep on-screen text concise; use narrationText only for hidden scene detail when helpful.",
+    "Use asset media URLs only from the provided assets list.",
+    "Do not create audio unless the user explicitly asks for it.",
+    "If the user asks for a specific background color, create a real full-frame background clip in that color.",
+    "assistantMessage should be brief for small edits and scene-structured for full generated videos.",
     "Renderer compatible element presets:\n" + formatPresetList(ELEMENT_PRESET_NAMES),
     "Renderer compatible text presets:\n" + formatPresetList(TEXT_PRESET_NAMES),
-    "Available internal editing tools:\n" + formatToolList(),
+    "Available internal tools:\n" + formatToolList(),
   ].join("\n");
 
 export const buildVideoEditorUserPrompt = ({
@@ -213,27 +179,57 @@ export const buildVideoEditorUserPrompt = ({
   assets: AiEditorAssetContext[];
   currentSequence: TimelineSequence;
   transcriptSegments: AiEditorTranscriptSegment[];
-}) =>
-  JSON.stringify(
+}) => {
+  const requestAnalysis = analyzeUserRequest(userMessage);
+  const planningScaffold = buildSceneBlueprints(requestAnalysis, userMessage).map((scene, index) => ({
+    sceneNumber: index + 1,
+    label: createSceneLabel(index, requestAnalysis.language),
+    title: scene.title,
+    body: scene.body,
+    keyPoints: scene.list,
+    narration: scene.narration,
+    visual: scene.visual,
+    motion: scene.motionNote,
+  }));
+
+  return JSON.stringify(
     {
       agent: {
         role: "helpful assistant inside a video editor",
         capabilities: AI_EDITOR_TOOLS,
       },
       userRequest: userMessage,
+      requestAnalysis: {
+        language: requestAnalysis.language,
+        hasExplicitEditIntent: requestAnalysis.hasExplicitEditIntent,
+        needsGeneratedCoverage: requestAnalysis.needsGeneratedCoverage,
+        topic: requestAnalysis.topic,
+        aspectRatio: requestAnalysis.aspectRatio,
+        aspectRatioLabel: requestAnalysis.aspectRatioLabel,
+        orientation: requestAnalysis.orientation,
+        background: requestAnalysis.background,
+        backgroundSummary: requestAnalysis.backgroundSummary,
+        visualSignals: requestAnalysis.visualSignals,
+      },
+      workflow: {
+        phases: ["analyze", "plan", "write", "compose", "execute"],
+        planningExpectation: [
+          "Extract constraints before creating scenes.",
+          "If this is a full video, split the topic into multiple purposeful scenes.",
+          "Make each scene do one job rather than dumping all information into one card.",
+          "Expand the topic into real subtopics instead of placeholder headings.",
+          "Write support copy for each scene, not only a title.",
+          "Decide layout, graphic role, and motion intent per scene.",
+          "Use wide compositions for 16:9 and true portrait compositions for 9:16 instead of simulating the ratio with a small centered card.",
+          "Then output EditingSchema clips that reflect that plan.",
+        ],
+      },
+      planningScaffold,
       assets,
       currentSequence: summarizeCurrentSequence(currentSequence),
+      currentSequenceSceneSummary: buildSequenceSceneSummary(currentSequence),
       transcriptSegments,
       creativeDirection: buildCreativeDirectionContext(userMessage, currentSequence),
-      expectation: [
-        "Understand whether the user wants normal conversation or an actual edit.",
-        "If it is normal conversation, respond naturally and return no timeline changes.",
-        "If it is an edit request, translate it into concrete EditingSchema tracks and clips.",
-        "When the request is for a full video, cover the topic through multiple purposeful scenes instead of one generic slide.",
-        "Honor explicit hard constraints first, including aspect ratio, background color, and topic focus, then build the scene plan around them.",
-        "Choose the visual system that best fits this specific request rather than defaulting to one template composition.",
-        "Show the scene-by-scene plan in assistantMessage whenever you generate a full video or major rebuild.",
-      ],
       renderingVocabulary: {
         elementPresets: ELEMENT_PRESET_NAMES,
         textPresets: TEXT_PRESET_NAMES,
@@ -257,26 +253,26 @@ export const buildVideoEditorUserPrompt = ({
             displayText: "exact wording visible on screen",
             narrationText: "spoken script or narration guidance when needed",
             designIntent:
-              "short note about why the clip exists, what visual role it plays, and any motion or transition intent",
+              "short note about the purpose of the scene or element, including layout or motion intent when useful",
           },
           elementStyle: {
             fillColor: "primary fill or shape color",
             accentColor: "secondary accent color",
             textColor: "text color",
-            strokeColor: "stroke or outline color for elements",
-            strokeWidthPx: "stroke width for elements",
-            backgroundColor: "background or card color used directly on the element",
-            backgroundOpacity: "background alpha for overlays, cards, or subtitle surfaces",
-            opacity: "overall element opacity",
+            strokeColor: "stroke or outline color",
+            strokeWidthPx: "stroke width",
+            backgroundColor: "background or card color used on the element",
+            backgroundOpacity: "background alpha",
+            opacity: "overall opacity",
             borderRadiusPx: "corner radius",
             textAlign: "left | center | right",
-            fontFamily: "font family name when typography direction matters",
+            fontFamily: "font family when typography direction matters",
             fontSizePx: "font size for generated text elements",
             fontWeight: "numeric font weight",
             lineHeight: "unitless line height",
             letterSpacingEm: "letter spacing in em",
-            paddingXPx: "horizontal internal padding for card-like text elements",
-            paddingYPx: "vertical internal padding for card-like text elements",
+            paddingXPx: "horizontal inner padding",
+            paddingYPx: "vertical inner padding",
           },
           previewLayout:
             "previewX, previewY, previewWidth, and previewHeight are normalized zero-to-one canvas coordinates.",
@@ -285,15 +281,26 @@ export const buildVideoEditorUserPrompt = ({
         },
       },
       notes: [
-        "Prefer deterministic editing decisions.",
-        "When the user asks for subtitles, create subtitle track clips with short readable chunks.",
-        "If transcriptSegments are present for subtitle requests, treat them as the authoritative source text and timing.",
+        "Prefer deterministic editing decisions over vague creative filler.",
+        "If the user asks for subtitles, create subtitle track clips with short readable chunks.",
         "When source is asset, use asset mediaUrl from the provided assets list and do not invent URLs.",
+        "If the user specifies 16:9, 9:16, landscape, portrait, or an explicit render resolution, reflect that directly in aspectRatio and scene composition.",
+        "Treat '16 9' exactly like '16:9' and '9 16' exactly like '9:16'.",
+        "A 16:9 request should use the full wide frame; a 9:16 request should use a true portrait canvas rather than a narrow card inside 16:9.",
         "General chat is allowed. Chat-only messages should return empty tracks and durationFrames null.",
-        "Scene composition can evolve across the piece, but it should still feel intentionally directed.",
+        "If the request implies a full video, assistantMessage should show a meaningful scene plan, not just a generic confirmation.",
+        "If the request is about a topic, cover the topic in substance scene by scene instead of returning a deck of labels.",
+        "If the request is about a topic, cover the topic in substance scene by scene instead of returning a deck of labels.",
       ],
     },
     null,
     2,
   );
+};
+
+
+
+
+
+
 
