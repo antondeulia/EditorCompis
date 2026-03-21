@@ -26,6 +26,7 @@ interface TimelinePreviewProps {
   tracks: TimelineTrack[];
   currentFrame: number;
   frameRate: number;
+  sequenceAspectRatio?: number;
   isPlaying: boolean;
   selectedClipIds: string[];
   onSelectClip: (clipId: string | null) => void;
@@ -162,6 +163,7 @@ export const TimelinePreview = ({
   tracks,
   currentFrame,
   frameRate,
+  sequenceAspectRatio,
   isPlaying,
   selectedClipIds,
   onSelectClip,
@@ -174,6 +176,7 @@ export const TimelinePreview = ({
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [interactionState, setInteractionState] = useState<PreviewInteractionState | null>(null);
   const [viewportAspect, setViewportAspect] = useState(16 / 9);
+  const canvasAspectRatio = sequenceAspectRatio && sequenceAspectRatio > 0 ? sequenceAspectRatio : 16 / 9;
   const [activeVideoAspect, setActiveVideoAspect] = useState<number | null>(null);
 
   const activePreviewClips = useMemo(
@@ -352,6 +355,16 @@ export const TimelinePreview = ({
       document.body.style.cursor = "";
     };
   }, [interactionState, onClipTransformChange]);
+
+  const previewFrameStyle = useMemo(() => {
+    if (viewportAspect <= 0 || canvasAspectRatio <= 0) {
+      return undefined;
+    }
+
+    return canvasAspectRatio >= viewportAspect
+      ? { aspectRatio: `${canvasAspectRatio}`, width: "100%", height: "auto" }
+      : { aspectRatio: `${canvasAspectRatio}`, width: "auto", height: "100%" };
+  }, [canvasAspectRatio, viewportAspect]);
 
   const handleMainVideoMetadata = useCallback((event: SyntheticEvent<HTMLVideoElement>) => {
     const videoElement = event.currentTarget;
@@ -570,18 +583,21 @@ export const TimelinePreview = ({
       </div>
     );
   }, []);
+
+  
+
   const getRenderedLayout = useCallback(
     (clip: TimelineClip, baseLayout: PreviewLayout): PreviewLayout => {
       if (!clip.mediaUrl || !activeVideo || clip.id !== activeVideo.clip.id || !activeVideoAspect) {
         return baseLayout;
       }
 
-      if (!isFullFrameLayout(baseLayout) || viewportAspect <= 0) {
+      if (!isFullFrameLayout(baseLayout) || canvasAspectRatio <= 0) {
         return baseLayout;
       }
 
-      if (activeVideoAspect > viewportAspect) {
-        const fittedHeight = viewportAspect / activeVideoAspect;
+      if (activeVideoAspect > canvasAspectRatio) {
+        const fittedHeight = canvasAspectRatio / activeVideoAspect;
         return {
           previewX: 0,
           previewY: (1 - fittedHeight) / 2,
@@ -590,7 +606,7 @@ export const TimelinePreview = ({
         };
       }
 
-      const fittedWidth = activeVideoAspect / viewportAspect;
+      const fittedWidth = activeVideoAspect / canvasAspectRatio;
       return {
         previewX: (1 - fittedWidth) / 2,
         previewY: 0,
@@ -598,7 +614,7 @@ export const TimelinePreview = ({
         previewHeight: 1,
       };
     },
-    [activeVideo, activeVideoAspect, viewportAspect],
+    [activeVideo, activeVideoAspect, canvasAspectRatio],
   );
 
   const renderOverlayItem = useCallback(
@@ -654,7 +670,7 @@ export const TimelinePreview = ({
         onDrop={handlePreviewDrop}
       >
         {activeVideo?.clip.mediaUrl ? (
-          <div className={styles.previewVideoFrame}>
+          <div className={styles.previewVideoFrame} style={previewFrameStyle}>
             <video
               key={`${activeVideo.clip.id}-main`}
               ref={mainVideoRef}
@@ -667,7 +683,7 @@ export const TimelinePreview = ({
             <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
           </div>
         ) : (
-          <div className={styles.previewVideoFrame}>
+          <div className={styles.previewVideoFrame} style={previewFrameStyle}>
             <div className={styles.previewOverlayLayer}>{activePreviewClips.map(renderOverlayItem)}</div>
           </div>
         )}
@@ -675,6 +691,16 @@ export const TimelinePreview = ({
     </section>
   );
 };
+
+
+
+
+
+
+
+
+
+
 
 
 

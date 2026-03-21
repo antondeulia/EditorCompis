@@ -61,5 +61,7 @@ export interface TimelineSequence {
   name: string;
   frameRate: number;
   durationFrames: number;
+  aspectRatio?: number;
   tracks: TimelineTrack[];
 }
+

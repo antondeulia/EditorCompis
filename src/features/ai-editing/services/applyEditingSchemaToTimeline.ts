@@ -203,6 +203,10 @@ export const applyEditingSchemaToTimeline = (
     typeof schema.durationFrames === "number" && Number.isFinite(schema.durationFrames)
       ? Math.max(Math.round(schema.durationFrames), 1)
       : baseSequence.durationFrames;
+  const targetAspectRatio =
+    typeof schema.aspectRatio === "number" && Number.isFinite(schema.aspectRatio) && schema.aspectRatio > 0.1
+      ? schema.aspectRatio
+      : baseSequence.aspectRatio;
 
   const nextTracks = baseSequence.tracks.map((track) => ({
     ...track,
@@ -235,6 +239,11 @@ export const applyEditingSchemaToTimeline = (
   return {
     ...baseSequence,
     durationFrames: targetDurationFrames,
+    aspectRatio: targetAspectRatio,
     tracks: nextTracks,
   };
 };
+
+
+
+

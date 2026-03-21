@@ -54,6 +54,7 @@ export interface EditingSchema {
   version: "1.0";
   assistantMessage: string;
   durationFrames: number | null;
+  aspectRatio?: number | null;
   tracks: EditingSchemaTrack[];
 }
 
@@ -120,6 +121,14 @@ export const isEditingSchema = (value: unknown): value is EditingSchema => {
     if (!isFiniteNumber(value.durationFrames) || value.durationFrames <= 0) {
       return false;
     }
+  }
+
+  if (
+    value.aspectRatio !== undefined &&
+    value.aspectRatio !== null &&
+    (!isFiniteNumber(value.aspectRatio) || value.aspectRatio <= 0.1)
+  ) {
+    return false;
   }
 
   if (!Array.isArray(value.tracks)) {
@@ -201,12 +210,15 @@ export const isEditingSchema = (value: unknown): value is EditingSchema => {
 export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["assistantMessage", "version", "durationFrames", "tracks"],
+  required: ["assistantMessage", "version", "durationFrames", "aspectRatio", "tracks"],
   properties: {
     assistantMessage: { type: "string", minLength: 1 },
     version: { type: "string", enum: ["1.0"] },
     durationFrames: {
       anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }],
+    },
+    aspectRatio: {
+      anyOf: [{ type: "number", exclusiveMinimum: 0.1, maximum: 10 }, { type: "null" }],
     },
     tracks: {
       type: "array",
@@ -373,6 +385,8 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
     }
   }
 };
+
+
 
 
 

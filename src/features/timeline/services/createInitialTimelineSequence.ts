@@ -1,10 +1,11 @@
-﻿import { TimelineSequence } from "@/features/timeline/types/timeline";
+import { TimelineSequence } from "@/features/timeline/types/timeline";
 
 export const createInitialTimelineSequence = (): TimelineSequence => ({
   id: "sequence-main",
   name: "Main Sequence",
   frameRate: 30,
   durationFrames: 30 * 300,
+  aspectRatio: 16 / 9,
   tracks: [
     {
       id: "track-v1",
@@ -50,3 +51,4 @@ export const createInitialTimelineSequence = (): TimelineSequence => ({
     },
   ],
 });
+

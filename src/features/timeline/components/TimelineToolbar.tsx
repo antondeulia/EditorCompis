@@ -4,6 +4,7 @@ interface TimelineToolbarProps {
   durationFrames: number;
   frameRate: number;
   currentTimeMs: number;
+  aspectRatio?: number;
   isPlaying: boolean;
   onTogglePlayback: () => void;
   onResizePointerDown: (event: React.PointerEvent<HTMLElement>) => void;
@@ -16,10 +17,33 @@ const formatToolbarTime = (milliseconds: number): string => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
+const formatAspectRatio = (aspectRatio?: number) => {
+  if (!aspectRatio || !Number.isFinite(aspectRatio) || aspectRatio <= 0) {
+    return "16:9";
+  }
+
+  const presets = [
+    { label: "16:9", value: 16 / 9 },
+    { label: "9:16", value: 9 / 16 },
+    { label: "1:1", value: 1 },
+    { label: "4:5", value: 4 / 5 },
+    { label: "21:9", value: 21 / 9 },
+  ];
+
+  const matchedPreset = presets.find((preset) => Math.abs(preset.value - aspectRatio) <= 0.02);
+  if (matchedPreset) {
+    return matchedPreset.label;
+  }
+
+  const width = Math.max(1, Math.round(aspectRatio * 100));
+  const height = 100;
+  return `${width}:${height}`;
+};
 export const TimelineToolbar = ({
   durationFrames,
   frameRate,
   currentTimeMs,
+  aspectRatio,
   isPlaying,
   onTogglePlayback,
   onResizePointerDown,
@@ -57,7 +81,7 @@ export const TimelineToolbar = ({
 
       <div className={styles.toolbarGroup}>
         <button type="button" className={styles.toolbarChip} aria-label="Aspect ratio">
-          16:9 v
+          {formatAspectRatio(aspectRatio)} v
         </button>
         <button type="button" className={styles.toolbarButton} aria-label="Search">
           FIND
@@ -86,6 +110,11 @@ export const TimelineToolbar = ({
     </header>
   );
 };
+
+
+
+
+
 
 
 

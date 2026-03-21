@@ -24,7 +24,7 @@ interface OpenAiVerboseWord {
   word?: unknown;
 }
 
-const OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
+const (OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const TRANSCRIPTION_MODEL = "whisper-1";
 
 interface TranscriptionAttemptResult {

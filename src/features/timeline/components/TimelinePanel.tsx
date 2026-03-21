@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   DragEvent as ReactDragEvent,
@@ -47,6 +47,9 @@ const MIN_TIMELINE_HEIGHT_PX = 180;
 const MIN_PREVIEW_HEIGHT_PX = 120;
 const DEFAULT_TIMELINE_HEIGHT_PX = 280;
 
+const getTimelineContentHeightPx = (trackCount: number) =>
+  TIMELINE_LAYOUT.rulerHeight + trackCount * TIMELINE_LAYOUT.trackHeight + 8;
+
 const parseExternalDropItem = (
   event: ReactDragEvent<HTMLDivElement>,
 ): SidebarTimelineItem | null => parseTimelineDragItemFromDataTransfer(event.dataTransfer);
@@ -65,7 +68,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
   const [dragState, setDragState] = useState<TimelineDragState | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
-  const [timelineHeightPx, setTimelineHeightPx] = useState(DEFAULT_TIMELINE_HEIGHT_PX);
+  const [timelineHeightPx, setTimelineHeightPx] = useState(() => Math.max(DEFAULT_TIMELINE_HEIGHT_PX, getTimelineContentHeightPx(sequence.tracks.length)));
 
   const timelinePanelRef = useRef<HTMLElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -171,9 +174,17 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         panelRect.height - MIN_PREVIEW_HEIGHT_PX,
         MIN_TIMELINE_HEIGHT_PX,
       );
+      const requiredTimelineHeightPx = Math.min(
+        Math.max(MIN_TIMELINE_HEIGHT_PX, getTimelineContentHeightPx(tracks.length)),
+        maxTimelineHeightPx,
+      );
 
       setTimelineHeightPx((currentHeightPx) =>
-        clamp(currentHeightPx, MIN_TIMELINE_HEIGHT_PX, maxTimelineHeightPx),
+        clamp(
+          Math.max(currentHeightPx, requiredTimelineHeightPx),
+          requiredTimelineHeightPx,
+          maxTimelineHeightPx,
+        ),
       );
     };
 
@@ -188,7 +199,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [tracks.length]);
 
   const maxTrackIndex = useMemo(() => Math.max(tracks.length - 1, 0), [tracks.length]);
 
@@ -799,6 +810,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         tracks={tracks}
         currentFrame={currentFrame}
         frameRate={sequence.frameRate}
+        sequenceAspectRatio={sequence.aspectRatio}
         isPlaying={isPlaying}
         selectedClipIds={selectedClipIds}
         onSelectClip={handlePreviewClipSelect}
@@ -810,6 +822,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         durationFrames={sequence.durationFrames}
         frameRate={sequence.frameRate}
         currentTimeMs={currentTimeMs}
+        aspectRatio={sequence.aspectRatio}
         isPlaying={isPlaying}
         onTogglePlayback={togglePlayback}
         onResizePointerDown={handlePanelSplitterPointerDown}
@@ -871,5 +884,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     </section>
   );
 };
+
+
 
 
