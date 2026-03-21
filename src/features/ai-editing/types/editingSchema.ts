@@ -1,4 +1,4 @@
-import { TimelineTrackType, TimelineTextAlign } from "@/features/timeline/types/timeline";
+﻿import { TimelineTextAlign, TimelineTrackType } from "@/features/timeline/types/timeline";
 
 export type EditingClipSource = "timeline" | "asset" | "element";
 
@@ -13,10 +13,19 @@ export interface EditingSchemaElementStyle {
   accentColor?: string | null;
   textColor?: string | null;
   strokeColor?: string | null;
+  strokeWidthPx?: number | null;
   backgroundColor?: string | null;
   backgroundOpacity?: number | null;
+  opacity?: number | null;
   borderRadiusPx?: number | null;
   textAlign?: TimelineTextAlign | null;
+  fontFamily?: string | null;
+  fontSizePx?: number | null;
+  fontWeight?: number | null;
+  lineHeight?: number | null;
+  letterSpacingEm?: number | null;
+  paddingXPx?: number | null;
+  paddingYPx?: number | null;
 }
 
 export interface EditingSchemaClip {
@@ -101,10 +110,19 @@ const isElementStyle = (value: unknown): value is EditingSchemaElementStyle => {
     (value.accentColor === undefined || isNullableString(value.accentColor)) &&
     (value.textColor === undefined || isNullableString(value.textColor)) &&
     (value.strokeColor === undefined || isNullableString(value.strokeColor)) &&
+    (value.strokeWidthPx === undefined || isNullableNumber(value.strokeWidthPx)) &&
     (value.backgroundColor === undefined || isNullableString(value.backgroundColor)) &&
     (value.backgroundOpacity === undefined || isNullableNumber(value.backgroundOpacity)) &&
+    (value.opacity === undefined || isNullableNumber(value.opacity)) &&
     (value.borderRadiusPx === undefined || isNullableNumber(value.borderRadiusPx)) &&
-    (value.textAlign === undefined || value.textAlign === null || isTextAlign(value.textAlign))
+    (value.textAlign === undefined || value.textAlign === null || isTextAlign(value.textAlign)) &&
+    (value.fontFamily === undefined || isNullableString(value.fontFamily)) &&
+    (value.fontSizePx === undefined || isNullableNumber(value.fontSizePx)) &&
+    (value.fontWeight === undefined || isNullableNumber(value.fontWeight)) &&
+    (value.lineHeight === undefined || isNullableNumber(value.lineHeight)) &&
+    (value.letterSpacingEm === undefined || isNullableNumber(value.letterSpacingEm)) &&
+    (value.paddingXPx === undefined || isNullableNumber(value.paddingXPx)) &&
+    (value.paddingYPx === undefined || isNullableNumber(value.paddingYPx))
   );
 };
 
@@ -207,6 +225,18 @@ export const isEditingSchema = (value: unknown): value is EditingSchema => {
   });
 };
 
+const nullableStringSchema = { anyOf: [{ type: "string" }, { type: "null" }] };
+const nullableNumberSchema = (minimum?: number, maximum?: number) => ({
+  anyOf: [
+    {
+      type: "number",
+      ...(typeof minimum === "number" ? { minimum } : {}),
+      ...(typeof maximum === "number" ? { maximum } : {}),
+    },
+    { type: "null" },
+  ],
+});
+
 export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
@@ -263,9 +293,7 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
                 startFrame: { type: "integer", minimum: 0 },
                 durationFrames: { type: "integer", minimum: 1 },
                 source: { type: "string", enum: ["timeline", "asset", "element"] },
-                mediaUrl: {
-                  anyOf: [{ type: "string" }, { type: "null" }]
-                },
+                mediaUrl: nullableStringSchema,
                 previewX: {
                   anyOf: [{ type: "number", minimum: 0, maximum: 1 }, { type: "null" }]
                 },
@@ -278,39 +306,17 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
                 previewHeight: {
                   anyOf: [{ type: "number", minimum: 0.08, maximum: 1 }, { type: "null" }]
                 },
-                subtitleTextColor: {
-                  anyOf: [{ type: "string" }, { type: "null" }]
-                },
-                subtitleOutlineColor: {
-                  anyOf: [{ type: "string" }, { type: "null" }]
-                },
-                subtitleOutlineWidth: {
-                  anyOf: [{ type: "number", minimum: 0, maximum: 12 }, { type: "null" }]
-                },
-                subtitleBackgroundColor: {
-                  anyOf: [{ type: "string" }, { type: "null" }]
-                },
-                subtitleBackgroundOpacity: {
-                  anyOf: [{ type: "number", minimum: 0, maximum: 1 }, { type: "null" }]
-                },
-                subtitleFontWeight: {
-                  anyOf: [{ type: "number", minimum: 100, maximum: 900 }, { type: "null" }]
-                },
-                subtitleFontSizePx: {
-                  anyOf: [{ type: "number", minimum: 10, maximum: 96 }, { type: "null" }]
-                },
-                subtitleBorderRadiusPx: {
-                  anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }]
-                },
-                subtitlePaddingXPx: {
-                  anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }]
-                },
-                subtitlePaddingYPx: {
-                  anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }]
-                },
-                elementPreset: {
-                  anyOf: [{ type: "string" }, { type: "null" }]
-                },
+                subtitleTextColor: nullableStringSchema,
+                subtitleOutlineColor: nullableStringSchema,
+                subtitleOutlineWidth: nullableNumberSchema(0, 12),
+                subtitleBackgroundColor: nullableStringSchema,
+                subtitleBackgroundOpacity: nullableNumberSchema(0, 1),
+                subtitleFontWeight: nullableNumberSchema(100, 900),
+                subtitleFontSizePx: nullableNumberSchema(10, 160),
+                subtitleBorderRadiusPx: nullableNumberSchema(0, 64),
+                subtitlePaddingXPx: nullableNumberSchema(0, 64),
+                subtitlePaddingYPx: nullableNumberSchema(0, 64),
+                elementPreset: nullableStringSchema,
                 content: {
                   anyOf: [
                     {
@@ -318,15 +324,9 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
                       additionalProperties: false,
                       required: ["displayText", "narrationText", "designIntent"],
                       properties: {
-                        displayText: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        narrationText: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        designIntent: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        }
+                        displayText: nullableStringSchema,
+                        narrationText: nullableStringSchema,
+                        designIntent: nullableStringSchema,
                       }
                     },
                     { type: "null" }
@@ -342,36 +342,40 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
                         "accentColor",
                         "textColor",
                         "strokeColor",
+                        "strokeWidthPx",
                         "backgroundColor",
                         "backgroundOpacity",
+                        "opacity",
                         "borderRadiusPx",
-                        "textAlign"
+                        "textAlign",
+                        "fontFamily",
+                        "fontSizePx",
+                        "fontWeight",
+                        "lineHeight",
+                        "letterSpacingEm",
+                        "paddingXPx",
+                        "paddingYPx"
                       ],
                       properties: {
-                        fillColor: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        accentColor: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        textColor: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        strokeColor: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        backgroundColor: {
-                          anyOf: [{ type: "string" }, { type: "null" }]
-                        },
-                        backgroundOpacity: {
-                          anyOf: [{ type: "number", minimum: 0, maximum: 1 }, { type: "null" }]
-                        },
-                        borderRadiusPx: {
-                          anyOf: [{ type: "number", minimum: 0, maximum: 64 }, { type: "null" }]
-                        },
+                        fillColor: nullableStringSchema,
+                        accentColor: nullableStringSchema,
+                        textColor: nullableStringSchema,
+                        strokeColor: nullableStringSchema,
+                        strokeWidthPx: nullableNumberSchema(0, 24),
+                        backgroundColor: nullableStringSchema,
+                        backgroundOpacity: nullableNumberSchema(0, 1),
+                        opacity: nullableNumberSchema(0, 1),
+                        borderRadiusPx: nullableNumberSchema(0, 128),
                         textAlign: {
                           anyOf: [{ type: "string", enum: ["left", "center", "right"] }, { type: "null" }]
-                        }
+                        },
+                        fontFamily: nullableStringSchema,
+                        fontSizePx: nullableNumberSchema(8, 240),
+                        fontWeight: nullableNumberSchema(100, 900),
+                        lineHeight: nullableNumberSchema(0.8, 3),
+                        letterSpacingEm: nullableNumberSchema(-0.2, 0.5),
+                        paddingXPx: nullableNumberSchema(0, 160),
+                        paddingYPx: nullableNumberSchema(0, 160),
                       }
                     },
                     { type: "null" }
@@ -385,8 +389,4 @@ export const EDITING_SCHEMA_JSON_SCHEMA: Record<string, unknown> = {
     }
   }
 };
-
-
-
-
 

@@ -29,6 +29,8 @@ interface StoryboardScene {
   accentPreset: string;
   designIntent: string;
   motionNote: string;
+  layoutVariant: SceneLayoutVariant;
+  visual: string;
 }
 
 interface FallbackTheme {
@@ -48,10 +50,12 @@ interface ScenePlanSummary {
   body: string | null;
   list: string[];
   visual: string | null;
+  layout: string;
   motion: string;
 }
 
 type SceneRole = 'background' | 'label' | 'title' | 'body' | 'list' | 'graphic' | 'accent' | 'subtitle';
+type SceneLayoutVariant = 'split-left' | 'split-right' | 'stacked' | 'poster' | 'center-focus';
 
 const KNOWN_PRESET_NAMES = [
   'Hero Title (H1)',
@@ -96,6 +100,16 @@ const LANDSCAPE_FORMAT_PATTERN = /(horizontal|landscape|widescreen|youtube|го�
 const LIGHT_BACKGROUND_PATTERN = /(white background|white bg|light background|бел(?:ый|ом|ом фоне)|светл(?:ый|ом) фон)/i;
 const DARK_BACKGROUND_PATTERN = /(dark background|black background|темн(?:ый|ом) фон|черн(?:ый|ом) фон)/i;
 const CYRILLIC_PATTERN = /[А-Яа-яЁё]/;
+
+const hasPurpleBackgroundRequest = (userMessage: string) => {
+  const normalizedMessage = userMessage.toLowerCase();
+  return (
+    normalizedMessage.includes('purple') ||
+    normalizedMessage.includes('violet') ||
+    normalizedMessage.includes('??????') ||
+    normalizedMessage.includes('???????')
+  );
+};
 
 const clamp = (value: number, min: number, max: number) => {
   if (value < min) {
@@ -319,6 +333,17 @@ const deriveTopicTitle = (userMessage: string) => {
 };
 
 const getFallbackTheme = (userMessage: string): FallbackTheme => {
+  if (hasPurpleBackgroundRequest(userMessage)) {
+    return {
+      backgroundPreset: 'Solid Rectangle',
+      backgroundColor: '#6D28D9',
+      textColor: '#F8FAFC',
+      surfaceColor: '#7C3AED',
+      accentColor: '#FDE68A',
+      lineColor: '#C4B5FD',
+    };
+  }
+
   if (LIGHT_BACKGROUND_PATTERN.test(userMessage)) {
     return {
       backgroundPreset: 'White Background',
@@ -352,33 +377,170 @@ const getFallbackTheme = (userMessage: string): FallbackTheme => {
 };
 
 const getBackgroundSummary = (userMessage: string, isRussian: boolean) => {
+  if (hasPurpleBackgroundRequest(userMessage)) {
+    return isRussian ? '?????????? ???' : 'purple background';
+  }
+
   if (LIGHT_BACKGROUND_PATTERN.test(userMessage)) {
-    return isRussian ? 'белый фон' : 'white background';
+    return isRussian ? '????? ???' : 'white background';
   }
 
   if (DARK_BACKGROUND_PATTERN.test(userMessage)) {
-    return isRussian ? 'темный фон' : 'dark background';
+    return isRussian ? '?????? ???' : 'dark background';
   }
 
-  return isRussian ? 'чистый нейтральный фон' : 'clean neutral background';
+  return isRussian ? '?????? ??????????? ???' : 'clean neutral background';
 };
 
 const getCompositionSummary = (aspectRatio: number, isRussian: boolean) => {
   if (aspectRatio < 0.85) {
     return isRussian
-      ? 'Вертикальная композиция: заголовок и текстовые блоки сверху, ниже отдельный визуальный блок, все элементы держатся в безопасных полях.'
+      ? '???????????? ??????????: ????????? ? ????????? ????? ??????, ???? ????????? ?????????? ????, ??? ???????? ???????? ? ?????????? ?????.'
       : 'Vertical composition: headline and text stack at the top, a separate visual block below, and everything kept inside safe margins.';
   }
 
   if (aspectRatio <= 1.15) {
     return isRussian
-      ? 'Почти квадратная композиция: сильный верхний заголовок, компактный текстовый стек и отдельная зона под графику без налезания элементов.'
+      ? '????? ?????????? ??????????: ??????? ??????? ?????????, ?????????? ????????? ???? ? ????????? ???? ??? ??????? ??? ????????? ?????????.'
       : 'Near square composition: strong top headline, compact text stack, and a separate graphic zone with no overlaps.';
   }
 
   return isRussian
-    ? 'Композиция 16:9 по центру: слева текстовая иерархия, справа отдельный графический блок, ровные поля и читаемые отступы.'
-    : 'Centered 16 by 9 composition: text hierarchy on the left, separate graphic block on the right, and clean readable margins.';
+    ? '?????????? 16:9 ? ??????????? ?????? ? ?????? ??????????? ?????????: ????? ???? ???????? ??? split layout, ????? ??? stacked ??? poster.'
+    : '16 by 9 composition with safe margins and scene specific layout shifts: some scenes use split layouts, others use stacked or poster framing.';
+};
+
+
+const getSceneLayoutVariant = (sceneIndex: number, aspectRatio: number): SceneLayoutVariant => {
+  if (aspectRatio < 0.85) {
+    return sceneIndex % 2 === 0 ? 'stacked' : 'center-focus';
+  }
+
+  if (aspectRatio <= 1.15) {
+    return sceneIndex % 2 === 0 ? 'poster' : 'stacked';
+  }
+
+  const variants: SceneLayoutVariant[] = ['poster', 'split-left', 'stacked', 'split-right', 'center-focus'];
+  return variants[sceneIndex % variants.length] ?? 'split-left';
+};
+
+const getRoleLayoutForVariant = (
+  role: SceneRole,
+  aspectRatio: number,
+  layoutVariant: SceneLayoutVariant,
+): { previewX: number; previewY: number; previewWidth: number; previewHeight: number } => {
+  if (role === 'background' || role === 'subtitle') {
+    return getDefaultRoleLayout(role, aspectRatio, 0);
+  }
+
+  if (aspectRatio < 0.85) {
+    return getDefaultRoleLayout(role, aspectRatio, 0);
+  }
+
+  switch (layoutVariant) {
+    case 'split-right':
+      switch (role) {
+        case 'label':
+          return { previewX: 0.62, previewY: 0.1, previewWidth: 0.2, previewHeight: 0.05 };
+        case 'title':
+          return { previewX: 0.5, previewY: 0.18, previewWidth: 0.32, previewHeight: 0.16 };
+        case 'accent':
+          return { previewX: 0.68, previewY: 0.36, previewWidth: 0.14, previewHeight: 0.012 };
+        case 'body':
+          return { previewX: 0.5, previewY: 0.4, previewWidth: 0.32, previewHeight: 0.11 };
+        case 'list':
+          return { previewX: 0.5, previewY: 0.56, previewWidth: 0.3, previewHeight: 0.18 };
+        case 'graphic':
+          return { previewX: 0.1, previewY: 0.18, previewWidth: 0.3, previewHeight: 0.58 };
+        default:
+          return getDefaultRoleLayout(role, aspectRatio, 0);
+      }
+    case 'stacked':
+      switch (role) {
+        case 'label':
+          return { previewX: 0.1, previewY: 0.08, previewWidth: 0.18, previewHeight: 0.05 };
+        case 'title':
+          return { previewX: 0.1, previewY: 0.16, previewWidth: 0.74, previewHeight: 0.14 };
+        case 'accent':
+          return { previewX: 0.1, previewY: 0.32, previewWidth: 0.16, previewHeight: 0.012 };
+        case 'body':
+          return { previewX: 0.1, previewY: 0.38, previewWidth: 0.74, previewHeight: 0.09 };
+        case 'list':
+          return { previewX: 0.1, previewY: 0.5, previewWidth: 0.72, previewHeight: 0.14 };
+        case 'graphic':
+          return { previewX: 0.2, previewY: 0.68, previewWidth: 0.6, previewHeight: 0.18 };
+        default:
+          return getDefaultRoleLayout(role, aspectRatio, 0);
+      }
+    case 'poster':
+      switch (role) {
+        case 'label':
+          return { previewX: 0.12, previewY: 0.1, previewWidth: 0.24, previewHeight: 0.05 };
+        case 'title':
+          return { previewX: 0.12, previewY: 0.2, previewWidth: 0.68, previewHeight: 0.18 };
+        case 'accent':
+          return { previewX: 0.12, previewY: 0.4, previewWidth: 0.18, previewHeight: 0.012 };
+        case 'body':
+          return { previewX: 0.12, previewY: 0.46, previewWidth: 0.5, previewHeight: 0.1 };
+        case 'list':
+          return { previewX: 0.12, previewY: 0.6, previewWidth: 0.34, previewHeight: 0.14 };
+        case 'graphic':
+          return { previewX: 0.64, previewY: 0.42, previewWidth: 0.2, previewHeight: 0.28 };
+        default:
+          return getDefaultRoleLayout(role, aspectRatio, 0);
+      }
+    case 'center-focus':
+      switch (role) {
+        case 'label':
+          return { previewX: 0.37, previewY: 0.08, previewWidth: 0.26, previewHeight: 0.05 };
+        case 'title':
+          return { previewX: 0.22, previewY: 0.18, previewWidth: 0.56, previewHeight: 0.16 };
+        case 'accent':
+          return { previewX: 0.43, previewY: 0.36, previewWidth: 0.14, previewHeight: 0.012 };
+        case 'body':
+          return { previewX: 0.25, previewY: 0.42, previewWidth: 0.5, previewHeight: 0.09 };
+        case 'list':
+          return { previewX: 0.27, previewY: 0.55, previewWidth: 0.46, previewHeight: 0.14 };
+        case 'graphic':
+          return { previewX: 0.34, previewY: 0.72, previewWidth: 0.32, previewHeight: 0.14 };
+        default:
+          return getDefaultRoleLayout(role, aspectRatio, 0);
+      }
+    case 'split-left':
+    default:
+      return getDefaultRoleLayout(role, aspectRatio, 0);
+  }
+};
+
+const getSceneTextAlign = (layoutVariant: SceneLayoutVariant): 'left' | 'center' => {
+  if (layoutVariant === 'center-focus') {
+    return 'center';
+  }
+
+  return 'left';
+};
+
+const getLayoutSummary = (layoutVariant: SceneLayoutVariant, isRussian: boolean) => {
+  switch (layoutVariant) {
+    case 'split-right':
+      return isRussian ? '??????? ?????, ????? ??????' : 'graphic on the left, text on the right';
+    case 'stacked':
+      return isRussian ? '???????????? ????: ????? ??????, ??????? ????' : 'stacked frame: text above, visual below';
+    case 'poster':
+      return isRussian ? 'poster-like ???? ? ??????? ?????????? ? ????????? ????????' : 'poster-like frame with a large headline and separate accent';
+    case 'center-focus':
+      return isRussian ? '?????????????? ?????????? ? ??????? ?? ????? ??????' : 'centered composition focused on one key idea';
+    case 'split-left':
+    default:
+      return isRussian ? '????? ?????, ??????? ??????' : 'text on the left, graphic on the right';
+  }
+};
+
+const createSceneLabel = (index: number, isRussian: boolean) => {
+  const labels = isRussian
+    ? ['??????', '????', '????????', '????????', '?????']
+    : ['HOOK', 'BASE', 'MECHANICS', 'SCENARIO', 'TAKEAWAY'];
+  return labels[index] ?? (isRussian ? '?????' : 'SCENE');
 };
 
 const getDefaultRoleLayout = (
@@ -878,112 +1040,136 @@ const createElementClip = ({
       : undefined,
 });
 
-const buildStoryboardScenes = (topic: string, isRussian: boolean): StoryboardScene[] => {
+const buildStoryboardScenes = (topic: string, userMessage: string, isRussian: boolean): StoryboardScene[] => {
+  const backgroundSummary = getBackgroundSummary(userMessage, isRussian);
+  const normalizedTopic = sanitizeText(topic, isRussian ? '????' : 'the topic');
+  const aspectLabel = getAspectRatioLabel(inferRequestedAspectRatio(userMessage) ?? DEFAULT_VIEWPORT_ASPECT_RATIO);
+
   if (isRussian) {
     return [
       {
-        label: 'ВСТУПЛЕНИЕ',
-        title: topic,
-        body: 'Коротко вводим тему, обозначаем пользу и настраиваем зрителя на понятную структуру разбора.',
-        list: ['Что это', 'Зачем это нужно', 'Что будет дальше'],
-        narration: 'Открываем видео темой ' + topic + ', быстро объясняем контекст и обещаем понятный разбор по шагам.',
+        label: createSceneLabel(0, true),
+        title: normalizedTopic,
+        body: '???????? ???? ? ????: ??? ??? ? ?????? ? ??? ????? ????????????? ?????? ??????.',
+        list: ['??? ???', '?????? ?????', '??? ???????? ??????'],
+        narration: '????????? ???? ' + normalizedTopic + ' ???????? ? ???????? ???????, ????? ??????? ????? ????? ????????.',
         accentPreset: 'Solid Rectangle',
-        designIntent: 'Чистый стартовый кадр с сильной левой иерархией и отдельным визуальным блоком справа.',
-        motionNote: 'Заголовок входит мягко снизу, текст проявляется спокойно, графика появляется аккуратным scale in.',
+        designIntent: '??????????? ????? ? ??????? ' + aspectLabel + ' ?? ???? ' + backgroundSummary + ' ? ??????? ????????? ? ?????? ???????.',
+        motionNote: '??????? ????????? ?????? ????????, ????????? ????? ?????????? ?? ????????, ??????????? ???? ???????????? ???? ??? ?????????.',
+        layoutVariant: 'poster',
+        visual: '??????????? ???????? ?????? ???? ??? ??????? ?????????????? ????????',
       },
       {
-        label: 'ОСНОВА',
-        title: 'Что это такое',
-        body: 'Даём простое определение без перегруза терминами, чтобы зритель сразу ухватил суть.',
-        list: ['Простое определение', 'Главный принцип', 'Одна ключевая мысль'],
-        narration: 'Формулируем ядро темы ' + topic + ' простыми словами и закладываем основу для следующих сцен.',
+        label: createSceneLabel(1, true),
+        title: '??? ??? ?????',
+        body: '???? ??????? ??????????? ? ??????? ?????? ???????????? ? ??????? ??????.',
+        list: ['??????? ??????????', '??????? ???????', '???? ????? ? ??????'],
+        narration: '?? ?????? ????? ?????????, ??? ????? ' + normalizedTopic + ', ??? ????????????????? ?????????? ? ??? ????? ??????.',
         accentPreset: 'Circle Pulse',
-        designIntent: 'Образовательный кадр с ясным фокусом на определении и компактной поддерживающей графикой.',
-        motionNote: 'Кикер плавно появляется, основной текст заезжает очень коротко, круглый плейсхолдер появляется без резкости.',
+        designIntent: '?????-??????????? ? ????? ??????? ???????, ???????? ???????????? ? ????????? ?????????? ??????.',
+        motionNote: '??????? ?????????? ?????, ????? ???????? ?????, ????? ????? ???????????? ??????????? ??????.',
+        layoutVariant: 'split-left',
+        visual: '?????????????? ????? ??? ???????????????? ???????????',
       },
       {
-        label: 'МЕХАНИКА',
-        title: 'Как это работает',
-        body: 'Разбиваем идею на короткие понятные шаги, чтобы объяснение читалось как последовательность.',
-        list: ['Шаг 1', 'Шаг 2', 'Шаг 3'],
-        narration: 'Показываем, как работает ' + topic + ', раскладывая процесс на несколько коротких и логичных частей.',
+        label: createSceneLabel(2, true),
+        title: '??? ??? ????????',
+        body: '????????? ???????? ?? ???????? ????, ????? ?????? ????? ???? ??????? ? ?????? ???????.',
+        list: ['??? 1', '??? 2', '??? 3'],
+        narration: '?????? ??????????, ??? ??????? ' + normalizedTopic + ', ??????????? ??????? ?? ????????? ???????? ?????.',
         accentPreset: 'Triangle Marker',
-        designIntent: 'Структурный кадр с заголовком, описанием, списком и контрастной фигурой плейсхолдером.',
-        motionNote: 'Линия делает короткий wipe, пункты списка включаются мягко, графический маркер добавляет направление взгляду.',
+        designIntent: '??????????? ????? ? ??????, ????????? ?????? ? ???????? ??????????? ???????.',
+        motionNote: '????????? ????? ?????????? ??????, ????? ???? ?????????? ?? ???????, ? ??????? ?????????? ?????? ?? ?????.',
+        layoutVariant: 'stacked',
+        visual: '????????? ????????? ??? ????????? ????? ????????',
       },
       {
-        label: 'ПРИМЕР',
-        title: 'Пример на практике',
-        body: 'Закрепляем идею на конкретной ситуации или сравнении, чтобы тема перестала быть абстрактной.',
-        list: ['Сценарий', 'Что происходит', 'Почему это важно'],
-        narration: 'Показываем ' + topic + ' на практическом примере, чтобы зритель увидел применение, а не только теорию.',
+        label: createSceneLabel(3, true),
+        title: '??? ??? ???????? ?? ????????',
+        body: '????????? ???? ?? ?????????? ? ???????? ????????, ????????? ??? ???????????????? ????.',
+        list: ['????????', '??? ??????????', '?????? ??? ???????'],
+        narration: '????? ????????? ' + normalizedTopic + ' ? ?????????, ????? ?????????? ????? ?? ?????????????, ? ?????????.',
         accentPreset: 'Split Screen',
-        designIntent: 'Современный кадр с ощущением демонстрации или сравнения без реальных изображений.',
-        motionNote: 'Заголовок и текст входят спокойно, а правый визуальный блок собирается как аккуратная split screen композиция.',
+        designIntent: '?????-???????? ? ?????????? ???? ?????? ? ????????? ????????? ??????????, ???? ???? ???? ??? ???????? ????????.',
+        motionNote: '?????????? ?????????? ??? split scene: ???? ???? ?????? ????????, ?????? ?????????? ????????? ??? ?????????.',
+        layoutVariant: 'split-right',
+        visual: '????????? ???? ????????? ??? split-screen ???????????',
       },
       {
-        label: 'ИТОГ',
-        title: 'Что запомнить',
-        body: 'Фиксируем главный вывод и оставляем зрителю короткое правило, которое легко унести с собой.',
-        list: ['Главная мысль', 'Типичная ошибка', 'Финальный вывод'],
-        narration: 'Закрываем тему ' + topic + ', коротко повторяем главное и оставляем зрителю ясный вывод.',
+        label: createSceneLabel(4, true),
+        title: '??? ????? ?????????',
+        body: '????? ???????? ???? ??????? ????? ? ????????? ??????? ?????? ????? ?????? ????????? ??????????.',
+        list: ['??????? ?????', '?????? ??????', '???????? ?????'],
+        narration: '????????? ????? ?????????? ???? ' + normalizedTopic + ' ? ????????? ??????? ????? takeaway.',
         accentPreset: 'Arrow Swipe',
-        designIntent: 'Финальная карточка с ощущением завершения и направляющим графическим акцентом.',
-        motionNote: 'Финальный заголовок появляется уверенно, список собирается без шума, стрелочный акцент задаёт ощущение завершения сцены.',
+        designIntent: '????????? ???? ? ????? ???????????, ?????? ????????? ? ???????????? ????????? ? ??????.',
+        motionNote: '????????? ????? ?????????? ????????, ?????????????? ?????? ??????????? ?????? ? ????????, ??? ????????? ?????????.',
+        layoutVariant: 'center-focus',
+        visual: '????????? ????????? ???? ??? ??????????? directional graphic',
       },
     ];
   }
 
   return [
     {
-      label: 'INTRO',
-      title: topic,
-      body: 'Open with a clean framing of the topic, why it matters, and what the viewer is about to learn.',
-      list: ['What it is', 'Why it matters', 'What comes next'],
-      narration: 'Open with a clear framing of ' + topic + ', why it matters, and what the viewer should expect next.',
+      label: createSceneLabel(0, false),
+      title: normalizedTopic,
+      body: 'Open with what the topic is and why it deserves attention before the explanation gets more detailed.',
+      list: ['what it is', 'why it matters', 'what comes next'],
+      narration: 'Open the piece by framing ' + normalizedTopic + ' clearly so the viewer understands the context right away.',
       accentPreset: 'Solid Rectangle',
-      designIntent: 'Clean opening frame with a strong left text stack and a separate visual block on the right.',
-      motionNote: 'The title enters with a subtle rise, supporting text fades in gently, and the graphic placeholder scales in softly.',
+      designIntent: 'Opening scene in ' + aspectLabel + ' with ' + backgroundSummary + ' and a strong editorial hierarchy.',
+      motionNote: 'The title lands first, support copy follows in sequence, and the visual block establishes the topic without feeling generic.',
+      layoutVariant: 'poster',
+      visual: 'large thematic symbol or geometric metaphor',
     },
     {
-      label: 'CORE',
+      label: createSceneLabel(1, false),
       title: 'What it is',
-      body: 'Define the central concept in direct language before adding details, edge cases, or vocabulary.',
-      list: ['Simple definition', 'Core principle', 'One line takeaway'],
-      narration: 'Explain the core idea behind ' + topic + ' in plain language so the audience gets the foundation first.',
+      body: 'Define the idea in plain language and keep only one or two essential points on screen.',
+      list: ['simple definition', 'core principle', 'one key takeaway'],
+      narration: 'Give a clean definition of ' + normalizedTopic + ' without overloading the frame with too much text.',
       accentPreset: 'Circle Pulse',
-      designIntent: 'Educational frame that keeps the definition readable and visually focused.',
-      motionNote: 'The kicker fades in first, the headline settles in quickly, and the circular placeholder appears without a jolt.',
+      designIntent: 'Definition scene with one clear thesis, measured typography, and a visual support element that does real communicative work.',
+      motionNote: 'The kicker fades in first, the main thesis follows, and the graphic accent appears softly without a jump.',
+      layoutVariant: 'split-left',
+      visual: 'iconographic or conceptual placeholder visual',
     },
     {
-      label: 'BREAKDOWN',
+      label: createSceneLabel(2, false),
       title: 'How it works',
-      body: 'Break the idea into a few readable beats so the explanation feels structured instead of dense.',
-      list: ['Step 1', 'Step 2', 'Step 3'],
-      narration: 'Walk through how ' + topic + ' works by splitting the explanation into short logical steps.',
+      body: 'Break the mechanism into short readable beats so the viewer can track the logic at a glance.',
+      list: ['step 1', 'step 2', 'step 3'],
+      narration: 'Walk through how ' + normalizedTopic + ' works by turning the process into short visual steps.',
       accentPreset: 'Triangle Marker',
-      designIntent: 'Structured explainer frame with a clear title, short description, and scan friendly bullets.',
-      motionNote: 'The divider wipes in briefly, bullet points appear softly, and the directional graphic guides the eye.',
+      designIntent: 'Mechanics scene built like a readable process diagram instead of a dense paragraph.',
+      motionNote: 'The process marker enters first, each step appears in order, and the visual cue moves the eye through the sequence.',
+      layoutVariant: 'stacked',
+      visual: 'modular process diagram or directional step flow',
     },
     {
-      label: 'EXAMPLE',
-      title: 'Example in practice',
-      body: 'Ground the explanation in a practical scenario or comparison so the concept stops feeling abstract.',
-      list: ['Scenario', 'Expected result', 'Why it matters'],
-      narration: 'Show ' + topic + ' in action with an example or comparison that makes the explanation concrete.',
+      label: createSceneLabel(3, false),
+      title: 'How it looks in practice',
+      body: 'Ground the idea in a scenario, comparison, or realistic use case so it stops feeling abstract.',
+      list: ['situation', 'what changes', 'why it helps'],
+      narration: 'Translate ' + normalizedTopic + ' into a practical example or comparison that feels concrete.',
       accentPreset: 'Split Screen',
-      designIntent: 'Modern comparison frame that suggests a demo or side by side explanation without real media.',
-      motionNote: 'Headline and copy enter calmly while the visual block assembles like a clean split screen composition.',
+      designIntent: 'Application scene with contrast between two states or viewpoints, even if only geometric placeholders are available.',
+      motionNote: 'The frame assembles as a clean split scene, letting the viewer compare one side against the other.',
+      layoutVariant: 'split-right',
+      visual: 'two panel comparison or split-screen placeholder',
     },
     {
-      label: 'TAKEAWAY',
+      label: createSceneLabel(4, false),
       title: 'What to remember',
-      body: 'Close with the key conclusion and leave the viewer with one clear rule of thumb.',
-      list: ['Main insight', 'Common mistake', 'Final takeaway'],
-      narration: 'Wrap up ' + topic + ' by restating the main lesson and leaving the audience with a clear takeaway.',
+      body: 'Close on one strong takeaway so the video ends with clarity instead of another information dump.',
+      list: ['main idea', 'common mistake', 'final takeaway'],
+      narration: 'Wrap up ' + normalizedTopic + ' by restating the core takeaway and the one idea worth remembering.',
       accentPreset: 'Arrow Swipe',
-      designIntent: 'Closing card with a directional accent and a concise summary.',
-      motionNote: 'The closing title lands confidently, the list resolves quickly, and the directional accent gives the frame a finished feel.',
+      designIntent: 'Closing scene centered around one clear takeaway and a decisive visual accent.',
+      motionNote: 'The final statement appears with confidence, secondary points settle quickly, and the accent closes the scene cleanly.',
+      layoutVariant: 'center-focus',
+      visual: 'final directional accent or closing symbol',
     },
   ];
 };
@@ -999,7 +1185,7 @@ const createStarterMontageTracks = ({
 }): EditingSchema['tracks'] => {
   const isRussian = prefersRussian(userMessage);
   const topic = deriveTopicTitle(userMessage);
-  const scenes = buildStoryboardScenes(topic, isRussian);
+  const scenes = buildStoryboardScenes(topic, userMessage, isRussian);
   const sceneSpans = buildSceneSpans(durationFrames, scenes.length);
   const theme = getFallbackTheme(userMessage);
 
@@ -1028,7 +1214,7 @@ const createStarterMontageTracks = ({
     });
 
   const lineClips = buildLayerClips('accent', 12, (scene, index, startFrame, durationFrames) => {
-    const layout = getDefaultRoleLayout('accent', aspectRatio, index);
+    const layout = getRoleLayoutForVariant('accent', aspectRatio, scene.layoutVariant);
     return createElementClip({
       name: 'Accent Line ' + String(index + 1),
       elementPreset: 'Line Accent',
@@ -1046,7 +1232,7 @@ const createStarterMontageTracks = ({
   });
 
   const labelClips = buildLayerClips('label', 4, (scene, index, startFrame, durationFrames) => {
-    const layout = getDefaultRoleLayout('label', aspectRatio, index);
+    const layout = getRoleLayoutForVariant('label', aspectRatio, scene.layoutVariant);
     return createElementClip({
       name: 'Label ' + String(index + 1),
       elementPreset: 'Topic Header (H3)',
@@ -1059,12 +1245,12 @@ const createStarterMontageTracks = ({
       displayText: scene.label,
       designIntent: scene.designIntent + ' ' + scene.motionNote,
       textColor: theme.accentColor,
-      textAlign: 'left',
+      textAlign: getSceneTextAlign(scene.layoutVariant),
     });
   });
 
   const titleClips = buildLayerClips('title', 8, (scene, index, startFrame, durationFrames) => {
-    const layout = getDefaultRoleLayout('title', aspectRatio, index);
+    const layout = getRoleLayoutForVariant('title', aspectRatio, scene.layoutVariant);
     return createElementClip({
       name: (index === 0 ? 'Scene Title: ' : 'Section Title: ') + scene.title,
       elementPreset: index === 0 ? 'Hero Title (H1)' : 'Section Title (H2)',
@@ -1077,12 +1263,12 @@ const createStarterMontageTracks = ({
       displayText: scene.title,
       designIntent: scene.designIntent + ' ' + scene.motionNote,
       textColor: theme.textColor,
-      textAlign: 'left',
+      textAlign: getSceneTextAlign(scene.layoutVariant),
     });
   });
 
   const bodyClips = buildLayerClips('body', 16, (scene, index, startFrame, durationFrames) => {
-    const layout = getDefaultRoleLayout('body', aspectRatio, index);
+    const layout = getRoleLayoutForVariant('body', aspectRatio, scene.layoutVariant);
     return createElementClip({
       name: 'Body Copy ' + String(index + 1),
       elementPreset: 'Description',
@@ -1096,12 +1282,12 @@ const createStarterMontageTracks = ({
       narrationText: scene.narration,
       designIntent: scene.designIntent + ' ' + scene.motionNote,
       textColor: theme.textColor,
-      textAlign: 'left',
+      textAlign: getSceneTextAlign(scene.layoutVariant),
     });
   });
 
   const listClips = buildLayerClips('list', 22, (scene, index, startFrame, durationFrames) => {
-    const layout = getDefaultRoleLayout('list', aspectRatio, index);
+    const layout = getRoleLayoutForVariant('list', aspectRatio, scene.layoutVariant);
     return createElementClip({
       name: 'List ' + String(index + 1),
       elementPreset: 'Body Text',
@@ -1115,12 +1301,12 @@ const createStarterMontageTracks = ({
       narrationText: scene.narration,
       designIntent: scene.designIntent + ' ' + scene.motionNote,
       textColor: theme.textColor,
-      textAlign: 'left',
+      textAlign: getSceneTextAlign(scene.layoutVariant),
     });
   });
 
   const graphicClips = buildLayerClips('graphic', 14, (scene, index, startFrame, durationFrames) => {
-    const layout = getDefaultRoleLayout('graphic', aspectRatio, index);
+    const layout = getRoleLayoutForVariant('graphic', aspectRatio, scene.layoutVariant);
     return createElementClip({
       name: 'Graphic ' + String(index + 1),
       elementPreset: scene.accentPreset,
@@ -1130,12 +1316,12 @@ const createStarterMontageTracks = ({
       previewY: layout.previewY,
       previewWidth: layout.previewWidth,
       previewHeight: layout.previewHeight,
-      designIntent: scene.designIntent + ' Use geometric placeholders instead of real images. ' + scene.motionNote,
+      designIntent: scene.designIntent + ' Visual role: ' + scene.visual + '. Use geometric placeholders instead of real images. ' + scene.motionNote,
       fillColor: theme.surfaceColor,
       accentColor: theme.accentColor,
       textColor: theme.textColor,
       borderRadiusPx: scene.accentPreset === 'Split Screen' ? 28 : 24,
-      textAlign: 'center',
+      textAlign: scene.layoutVariant === 'center-focus' ? 'center' : 'left',
     });
   });
 
@@ -1159,7 +1345,7 @@ const getStarterMontageDurationFrames = (currentSequence: TimelineSequence, user
     return currentSequence.durationFrames;
   }
 
-  const sceneCount = buildStoryboardScenes(deriveTopicTitle(userMessage), prefersRussian(userMessage)).length;
+  const sceneCount = buildStoryboardScenes(deriveTopicTitle(userMessage), userMessage, prefersRussian(userMessage)).length;
   const targetSeconds = clamp(Math.round(sceneCount * 4.8), 20, 42);
   return Math.max(currentSequence.frameRate * 6, currentSequence.frameRate * targetSeconds);
 };
@@ -1327,6 +1513,7 @@ const collectScenePlans = (tracks: EditingSchema['tracks'], frameRate: number, u
       body: getClipDisplayText(bodyEntry?.clip ?? { name: '', content: undefined }),
       list: splitListItems(listEntry?.clip.content?.displayText),
       visual: describeVisual(graphicEntry, isRussian),
+      layout: getLayoutSummary(getSceneLayoutVariant(index, 16 / 9), isRussian),
       motion: buildMotionDescription(Boolean(titleEntry), Boolean(bodyEntry), Boolean(listEntry), graphicEntry, isRussian),
     };
   });

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 import {
   AiEditorAssetContext,
@@ -336,6 +336,16 @@ export async function POST(request: Request) {
         let rawJsonText = "";
         let streamedAssistantChars = 0;
         let completedResponsePayload: unknown = null;
+        let hasEmittedAssistantStarted = false;
+
+        const emitAssistantStarted = () => {
+          if (hasEmittedAssistantStarted) {
+            return;
+          }
+
+          hasEmittedAssistantStarted = true;
+          emit({ type: "assistant_started" });
+        };
 
         const tryEmitAssistantDelta = () => {
           const partialMessage = extractAssistantMessageFromPartialJson(rawJsonText);
@@ -476,6 +486,8 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
 
 
 

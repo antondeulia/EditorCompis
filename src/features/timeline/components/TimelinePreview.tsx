@@ -1,4 +1,4 @@
-import {
+﻿import {
   DragEvent as ReactDragEvent,
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
@@ -481,15 +481,59 @@ export const TimelinePreview = ({
       textAlign: style?.textAlign,
       backgroundColor: style?.backgroundColor,
       borderRadius: typeof style?.borderRadiusPx === "number" ? `${style.borderRadiusPx}px` : undefined,
+      fontFamily: style?.fontFamily,
+      fontSize: typeof style?.fontSizePx === "number" ? `${style.fontSizePx}px` : undefined,
+      fontWeight: typeof style?.fontWeight === "number" ? style.fontWeight : undefined,
+      lineHeight: typeof style?.lineHeight === "number" ? String(style.lineHeight) : undefined,
+      letterSpacing: typeof style?.letterSpacingEm === "number" ? `${style.letterSpacingEm}em` : undefined,
       padding:
-        style?.backgroundColor || typeof style?.borderRadiusPx === "number"
-          ? "0.2em 0.4em"
+        typeof style?.paddingYPx === "number" || typeof style?.paddingXPx === "number"
+          ? `${style?.paddingYPx ?? 4}px ${style?.paddingXPx ?? 8}px`
+          : style?.backgroundColor || typeof style?.borderRadiusPx === "number"
+            ? "0.2em 0.4em"
+            : undefined,
+      opacity: typeof style?.opacity === "number" ? clamp(style.opacity, 0, 1) : undefined,
+      border:
+        typeof style?.strokeWidthPx === "number" && style?.strokeColor
+          ? `${style.strokeWidthPx}px solid ${style.strokeColor}`
           : undefined,
+      boxSizing: "border-box" as const,
     };
 
     if (trackType === "subtitle") {
       return (
-        <span className={styles.previewSubtitleText} style={textStyle}>
+        <span
+          className={styles.previewSubtitleText}
+          style={{
+            ...textStyle,
+            color: clip.subtitleStyle?.subtitleTextColor ?? textStyle.color,
+            backgroundColor: clip.subtitleStyle?.subtitleBackgroundColor ?? textStyle.backgroundColor,
+            opacity:
+              typeof clip.subtitleStyle?.subtitleBackgroundOpacity === "number"
+                ? clamp(clip.subtitleStyle.subtitleBackgroundOpacity, 0, 1)
+                : textStyle.opacity,
+            fontSize:
+              typeof clip.subtitleStyle?.subtitleFontSizePx === "number"
+                ? `${clip.subtitleStyle.subtitleFontSizePx}px`
+                : textStyle.fontSize,
+            fontWeight:
+              typeof clip.subtitleStyle?.subtitleFontWeight === "number"
+                ? clip.subtitleStyle.subtitleFontWeight
+                : textStyle.fontWeight,
+            borderRadius:
+              typeof clip.subtitleStyle?.subtitleBorderRadiusPx === "number"
+                ? `${clip.subtitleStyle.subtitleBorderRadiusPx}px`
+                : textStyle.borderRadius,
+            padding:
+              typeof clip.subtitleStyle?.subtitlePaddingYPx === "number" ||
+              typeof clip.subtitleStyle?.subtitlePaddingXPx === "number"
+                ? `${clip.subtitleStyle?.subtitlePaddingYPx ?? 10}px ${clip.subtitleStyle?.subtitlePaddingXPx ?? 12}px`
+                : textStyle.padding,
+            textShadow: clip.subtitleStyle?.subtitleOutlineColor
+              ? `0 0 0 ${clip.subtitleStyle.subtitleOutlineWidth ?? 0}px ${clip.subtitleStyle.subtitleOutlineColor}`
+              : undefined,
+          }}
+        >
           {getPreviewTextLabel(clip)}
         </span>
       );
@@ -513,7 +557,14 @@ export const TimelinePreview = ({
             opacity:
               typeof style?.backgroundOpacity === "number"
                 ? clamp(style.backgroundOpacity, 0, 1)
+                : typeof style?.opacity === "number"
+                  ? clamp(style.opacity, 0, 1)
+                  : undefined,
+            border:
+              typeof style?.strokeWidthPx === "number" && style?.strokeColor
+                ? `${style.strokeWidthPx}px solid ${style.strokeColor}`
                 : undefined,
+            boxSizing: "border-box",
           }}
         />
       );
@@ -524,7 +575,7 @@ export const TimelinePreview = ({
         <div
           className={styles.previewElementCircle}
           aria-hidden="true"
-          style={{ background: style?.fillColor ?? undefined }}
+          style={{ background: style?.fillColor ?? undefined, opacity: typeof style?.opacity === "number" ? clamp(style.opacity, 0, 1) : undefined, border: typeof style?.strokeWidthPx === "number" && style?.strokeColor ? `${style.strokeWidthPx}px solid ${style.strokeColor}` : undefined, boxSizing: "border-box" }}
         />
       );
     }
@@ -534,7 +585,7 @@ export const TimelinePreview = ({
         <div
           className={styles.previewElementTriangle}
           aria-hidden="true"
-          style={{ background: style?.fillColor ?? undefined }}
+          style={{ background: style?.fillColor ?? undefined, opacity: typeof style?.opacity === "number" ? clamp(style.opacity, 0, 1) : undefined, border: typeof style?.strokeWidthPx === "number" && style?.strokeColor ? `${style.strokeWidthPx}px solid ${style.strokeColor}` : undefined, boxSizing: "border-box" }}
         />
       );
     }
@@ -544,7 +595,7 @@ export const TimelinePreview = ({
         <div
           className={styles.previewElementLine}
           aria-hidden="true"
-          style={{ background: style?.backgroundColor ?? style?.fillColor ?? undefined }}
+          style={{ background: style?.backgroundColor ?? style?.fillColor ?? undefined, opacity: typeof style?.opacity === "number" ? clamp(style.opacity, 0, 1) : undefined, border: typeof style?.strokeWidthPx === "number" && style?.strokeColor ? `${style.strokeWidthPx}px solid ${style.strokeColor}` : undefined, boxSizing: "border-box" }}
         />
       );
     }
@@ -570,9 +621,16 @@ export const TimelinePreview = ({
             opacity:
               typeof style?.backgroundOpacity === "number"
                 ? clamp(style.backgroundOpacity, 0, 1)
-                : undefined,
+                : typeof style?.opacity === "number"
+                  ? clamp(style.opacity, 0, 1)
+                  : undefined,
             borderRadius:
               typeof style?.borderRadiusPx === "number" ? `${style.borderRadiusPx}px` : undefined,
+            border:
+              typeof style?.strokeWidthPx === "number" && style?.strokeColor
+                ? `${style.strokeWidthPx}px solid ${style.strokeColor}`
+                : undefined,
+            boxSizing: "border-box",
           }}
         />
         {displayText ? (
@@ -691,6 +749,8 @@ export const TimelinePreview = ({
     </section>
   );
 };
+
+
 
 
 

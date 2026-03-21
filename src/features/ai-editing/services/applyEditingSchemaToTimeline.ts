@@ -1,4 +1,4 @@
-import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
+﻿import { EditingSchema } from "@/features/ai-editing/types/editingSchema";
 import {
   TimelineClip,
   TimelineClipContent,
@@ -91,6 +91,12 @@ const normalizeContentText = (value: string | null | undefined) => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const normalizeNumericValue = (
+  value: number | null | undefined,
+  min: number,
+  max: number,
+): number | undefined => (typeof value === "number" ? clamp(value, min, max) : undefined);
+
 const toTimelineContent = (
   clip: EditingSchema["tracks"][number]["clips"][number],
 ): TimelineClipContent | undefined => {
@@ -119,21 +125,27 @@ const toTimelineElementStyle = (
     accentColor: normalizeContentText(clip.elementStyle.accentColor),
     textColor: normalizeContentText(clip.elementStyle.textColor),
     strokeColor: normalizeContentText(clip.elementStyle.strokeColor),
+    strokeWidthPx: normalizeNumericValue(clip.elementStyle.strokeWidthPx, 0, 24),
     backgroundColor: normalizeContentText(clip.elementStyle.backgroundColor),
-    backgroundOpacity:
-      typeof clip.elementStyle.backgroundOpacity === "number"
-        ? clamp(clip.elementStyle.backgroundOpacity, 0, 1)
-        : undefined,
-    borderRadiusPx:
-      typeof clip.elementStyle.borderRadiusPx === "number"
-        ? clamp(clip.elementStyle.borderRadiusPx, 0, 64)
-        : undefined,
+    backgroundOpacity: normalizeNumericValue(clip.elementStyle.backgroundOpacity, 0, 1),
+    opacity: normalizeNumericValue(clip.elementStyle.opacity, 0, 1),
+    borderRadiusPx: normalizeNumericValue(clip.elementStyle.borderRadiusPx, 0, 128),
     textAlign:
       clip.elementStyle.textAlign === "left" ||
       clip.elementStyle.textAlign === "center" ||
       clip.elementStyle.textAlign === "right"
         ? clip.elementStyle.textAlign
         : undefined,
+    fontFamily: normalizeContentText(clip.elementStyle.fontFamily),
+    fontSizePx: normalizeNumericValue(clip.elementStyle.fontSizePx, 8, 240),
+    fontWeight:
+      typeof clip.elementStyle.fontWeight === "number"
+        ? clamp(Math.round(clip.elementStyle.fontWeight / 100) * 100, 100, 900)
+        : undefined,
+    lineHeight: normalizeNumericValue(clip.elementStyle.lineHeight, 0.8, 3),
+    letterSpacingEm: normalizeNumericValue(clip.elementStyle.letterSpacingEm, -0.2, 0.5),
+    paddingXPx: normalizeNumericValue(clip.elementStyle.paddingXPx, 0, 160),
+    paddingYPx: normalizeNumericValue(clip.elementStyle.paddingYPx, 0, 160),
   };
 
   return Object.values(style).some((value) => value !== undefined) ? style : undefined;
@@ -243,7 +255,4 @@ export const applyEditingSchemaToTimeline = (
     tracks: nextTracks,
   };
 };
-
-
-
 
