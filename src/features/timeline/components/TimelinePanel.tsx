@@ -74,6 +74,12 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const timelineCanvasRef = useRef<HTMLDivElement | null>(null);
   const trackListRef = useRef<HTMLDivElement | null>(null);
+  const updateTracks = useCallback(
+    (updater: (currentTracks: TimelineTrack[]) => TimelineTrack[]) => {
+      setTracks((currentTracks) => updater(currentTracks));
+    },
+    [],
+  );
 
   const clipIdOrder = useMemo(
     () =>
@@ -118,6 +124,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       tracks,
     });
   }, [onSequenceChange, sequence, tracks]);
+
 
   useEffect(() => {
     const clearSelectionOnOutsideClick = (event: PointerEvent) => {
@@ -335,7 +342,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
 
         event.preventDefault();
         const selectedSet = new Set(selectedClipIds);
-        setTracks((currentTracks) =>
+        updateTracks((currentTracks) =>
           currentTracks.map((track) => ({
             ...track,
             clips: track.clips.filter((clip) => !selectedSet.has(clip.id)),
@@ -370,7 +377,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [clearSelection, frameStepMs, selectedClipIds, setCurrentTimeMs, setIsPlaying, togglePlayback, totalDurationMs]);
+  }, [clearSelection, frameStepMs, selectedClipIds, setCurrentTimeMs, setIsPlaying, togglePlayback, totalDurationMs, updateTracks]);
 
   const startInteraction = useCallback(
     (
@@ -530,7 +537,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         durationFrames: clipDurationFrames,
       });
 
-      setTracks((currentTracks) => {
+      updateTracks((currentTracks) => {
         const track = currentTracks[trackIndex];
         if (!track || track.type !== draggedItem.mediaType) {
           return currentTracks;
@@ -545,7 +552,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       setSnapGuideFrame(null);
       clearCurrentTimelineDragItem();
     },
-    [framePixelRatio, selectSingleClip, sequence.durationFrames, tracks],
+    [framePixelRatio, selectSingleClip, sequence.durationFrames, tracks, updateTracks],
   );
 
   const handlePreviewExternalDrop = useCallback(
@@ -595,11 +602,11 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
             }
           : baseClip;
 
-      setTracks((currentTracks) => insertClipIntoTrack(currentTracks, targetTrackIndex, droppedClip));
+      updateTracks((currentTracks) => insertClipIntoTrack(currentTracks, targetTrackIndex, droppedClip));
       selectSingleClip(droppedClip.id);
       clearCurrentTimelineDragItem();
     },
-    [currentFrame, framePixelRatio, selectSingleClip, sequence.durationFrames, tracks],
+    [currentFrame, framePixelRatio, selectSingleClip, sequence.durationFrames, tracks, updateTracks],
   );
 
   const handlePreviewClipSelect = useCallback(
@@ -619,7 +626,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       clipId: string,
       nextTransform: Pick<TimelineClip, "previewX" | "previewY" | "previewWidth" | "previewHeight">,
     ) => {
-      setTracks((currentTracks) =>
+      updateTracks((currentTracks) =>
         currentTracks.map((track) => ({
           ...track,
           clips: track.clips.map((clip) =>
@@ -636,7 +643,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
         })),
       );
     },
-    [],
+    [updateTracks],
   );
 
   const handleWindowPointerMove = useCallback(
@@ -758,7 +765,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
       }
 
       const droppedClip = buildDroppedClipFromDragState(currentDragState);
-      setTracks((currentTracks) =>
+      updateTracks((currentTracks) =>
         moveClipToTrack({
           tracks: currentTracks,
           clipId: currentDragState.clip.id,
@@ -771,7 +778,7 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     });
 
     setSnapGuideFrame(null);
-  }, [selectSingleClip]);
+  }, [selectSingleClip, updateTracks]);
 
   useEffect(() => {
     if (!dragState && !isScrubbing) {
@@ -884,6 +891,11 @@ export const TimelinePanel = ({ sequence, onSequenceChange }: TimelinePanelProps
     </section>
   );
 };
+
+
+
+
+
 
 
 

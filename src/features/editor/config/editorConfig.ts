@@ -27,15 +27,10 @@ const createLibraryItem = (
 
 export const DEFAULT_CLIP_DURATION_FRAMES = FRAME_RATE * 8;
 export const TOOL_PANEL_MIN_WIDTH = 320;
-export const STREAMING_STEP_MS = 20;
-export const STREAMING_CHUNK_SIZE = 3;
-export const SUBTITLE_REQUEST_PATTERN =
-  /(subtitle|subtitles|caption|captions|subtitles? track|субтитр|субтитры|титр|титры)/i;
 
 export const EDITOR_SIDEBAR_ITEMS: EditorSidebarItemDefinition[] = [
   { id: "assets", label: "Assets" },
-  { id: "ai-edit", label: "AI Edit" },
-  { id: "ai-tools", label: "AI Tools" },
+  { id: "chat", label: "Chat" },
   { id: "elements", label: "Elements" },
   { id: "text", label: "Text" },
   { id: "json", label: "JSON" },
@@ -87,7 +82,26 @@ export const TEXT_LIBRARY_SECTIONS: EditorSidebarLibrarySection[] = [
       createLibraryItem("text-subtitle", "CC", "Subtitle", "Subtitle in a lower safe area.", 4),
       createLibraryItem("text-description", "DS", "Description", "Description or clarification under the heading.", 7),
       createLibraryItem("text-body", "Tx", "Body Text", "Main body text for cards and scenes.", 8),
-      createLibraryItem("text-quote", "\"\"", "Quote Block", "Quote block with emphasized typography.", 8),
+      createLibraryItem("text-quote", '""', "Quote Block", "Quote block with emphasized typography.", 8),
     ],
   },
 ];
+
+export const LIBRARY_PANEL_CONTENT = {
+  elements: {
+    intro: "Drag any element to the matching timeline track.",
+    sections: ELEMENT_LIBRARY_SECTIONS,
+  },
+  text: {
+    intro: "Ready-made typography presets: from H1 to subtitle and body.",
+    sections: TEXT_LIBRARY_SECTIONS,
+  },
+} satisfies Partial<
+  Record<
+    EditorSidebarItemDefinition["id"],
+    {
+      intro: string;
+      sections: EditorSidebarLibrarySection[];
+    }
+  >
+>;

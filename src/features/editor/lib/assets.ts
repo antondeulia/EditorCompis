@@ -1,10 +1,7 @@
 import {
   DEFAULT_CLIP_DURATION_FRAMES,
 } from "@/features/editor/config/editorConfig";
-import {
-  EditorAiAssetContext,
-  EditorAssetItem,
-} from "@/features/editor/types/editor";
+import { EditorAssetItem } from "@/features/editor/types/editor";
 import { SidebarTimelineItem } from "@/features/timeline/lib/dragTransfer";
 
 const AUDIO_FILE_EXTENSIONS = [".wav", ".mp3", ".aac"];
@@ -114,18 +111,6 @@ export const createEditorAssetItem = async (file: File): Promise<EditorAssetItem
   };
 };
 
-export const buildAiAssetContext = (
-  assets: EditorAssetItem[],
-): EditorAiAssetContext[] =>
-  assets.map((asset) => ({
-    id: asset.id,
-    name: asset.file.name,
-    mediaType: inferMediaTypeFromAsset(asset.file),
-    durationFrames: asset.durationSeconds
-      ? Math.max(Math.round(asset.durationSeconds * DEFAULT_FRAME_RATE), 1)
-      : null,
-  }));
-
 export const createAssetDragItem = (asset: EditorAssetItem): SidebarTimelineItem => {
   const mediaType = inferMediaTypeFromAsset(asset.file);
   const durationFrames = asset.durationSeconds
@@ -139,19 +124,4 @@ export const createAssetDragItem = (asset: EditorAssetItem): SidebarTimelineItem
     source: "asset",
     mediaUrl: mediaType === "video" ? asset.previewUrl ?? undefined : undefined,
   };
-};
-
-export const getTranscriptionCandidate = (
-  assets: EditorAssetItem[],
-): EditorAssetItem | null => {
-  const videoAsset = assets.find(
-    (asset) => inferMediaTypeFromAsset(asset.file) === "video",
-  );
-  if (videoAsset) {
-    return videoAsset;
-  }
-
-  return (
-    assets.find((asset) => inferMediaTypeFromAsset(asset.file) === "audio") ?? null
-  );
 };
